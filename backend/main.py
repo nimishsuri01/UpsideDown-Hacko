@@ -1,25 +1,31 @@
 import os
-import uvicorn
 import io
 import csv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel
+import time
+import random
+import asyncio
 from typing import Dict, Any, Optional
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+import uvicorn
 
 from .models import (
     FailedTransactionEvent, 
     PaymentDeclineCode, 
+    PaymentMethod, 
     CardNetwork,
-    PaymentMethod
+    RecoveryAuditRecord
 )
 from .recovery_engine import AutonomousRecoveryEngine
 from .traffic_generator import AmbientTrafficGenerator
-from .gemini_advisor import GeminiRecoveryAdvisor
 
-app = FastAPI(title="PayRevive // Autonomous AI Revenue Recovery Engine")
+app = FastAPI(
+    title="PayRevive // Autonomous AI Revenue Recovery Engine",
+    description="Zero-Prompt FinTech Sentinel for Mobile UPI & Multi-Rail Involuntary Churn Recovery",
+    version="2.0.0"
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,69 +36,97 @@ app.add_middleware(
 )
 
 engine = AutonomousRecoveryEngine()
-traffic_gen = AmbientTrafficGenerator(engine=engine)
-advisor = GeminiRecoveryAdvisor()
+traffic_gen = AmbientTrafficGenerator(engine=engine, interval_seconds=3.0)
+ambient_telemetry_task = None
+
+async def ambient_telemetry_loop():
+    """Ambient background sentinel loop continuously polling bank & gateway nodes"""
+    while True:
+        try:
+            await asyncio.sleep(3.2)
+            for k, node in engine.bank_telemetry.items():
+                if node.status == "HEALTHY":
+                    if k == "npci":
+                        node.latency_ms = random.randint(64, 73)
+                    elif k == "hdfc":
+                        node.latency_ms = random.randint(88, 97)
+                    elif k == "icici":
+                        node.latency_ms = random.randint(81, 88)
+                    elif k == "razorpay":
+                        node.latency_ms = random.randint(111, 120)
+                elif node.status == "CRITICAL_OUTAGE":
+                    if k == "hdfc":
+                        node.latency_ms = random.randint(2380, 2520)
+                    elif k == "npci":
+                        node.latency_ms = random.randint(1820, 1940)
+
+            await engine.broadcast({
+                "type": "TELEMETRY_HEARTBEAT",
+                "telemetry": {k: v.model_dump() for k, v in engine.bank_telemetry.items()}
+            })
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            await asyncio.sleep(2)
+
+@app.on_event("startup")
+async def startup_event():
+    global ambient_telemetry_task
+    ambient_telemetry_task = asyncio.create_task(ambient_telemetry_loop())
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global ambient_telemetry_task
+    if ambient_telemetry_task:
+        ambient_telemetry_task.cancel()
+    traffic_gen.stop()
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await engine.connect(websocket)
     try:
         while True:
+            # Keep socket alive
             await websocket.receive_text()
     except WebSocketDisconnect:
         engine.disconnect(websocket)
-
-@app.get("/api/health")
-async def health():
-    return {
-        "status": "ONLINE",
-        "service": "PayRevive Autonomous Recovery Engine",
-        "traffic_generator_active": traffic_gen.is_running,
-        "metrics": engine.metrics
-    }
+    except Exception:
+        engine.disconnect(websocket)
 
 @app.get("/api/metrics")
 async def get_metrics():
     return engine.metrics
 
 @app.get("/api/audit")
-async def get_audit_trail():
-    return [r.model_dump() for r in engine.audit_records]
+async def get_audit_trail(limit: int = 50):
+    return [rec.model_dump() for rec in engine.audit_records[-limit:]]
 
-# Continuous Ambient Traffic Generator Controls
-@app.post("/api/traffic/start")
-async def start_traffic():
-    traffic_gen.start()
-    return {"status": "RUNNING", "message": "Ambient live payment failure stream started."}
-
-@app.post("/api/traffic/stop")
-async def stop_traffic():
-    traffic_gen.stop()
-    return {"status": "STOPPED", "message": "Ambient live payment failure stream stopped."}
-
-@app.get("/api/traffic/status")
-async def traffic_status():
-    return {"is_running": traffic_gen.is_running}
-
-# Export Audit Trail as CSV for Compliance / CFO Review
 @app.get("/api/audit/csv")
 async def export_audit_csv():
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "Record ID", "Timestamp", "Transaction ID", "Amount", "Currency", "Decline Code", 
-        "Issuing Bank", "Payment Rail", "Root Cause", "P(Recovery)", 
-        "Bandit Action", "Compliance Status", "Outcome", "Recovered Amount", "Fee Saved", "Latency ms"
+        "Record_ID", "Timestamp", "Amount_INR", "Issuing_Bank", "Payment_Rail",
+        "Decline_Code", "Root_Cause", "P_Recovery", "Chosen_Action", 
+        "Compliance_Status", "Outcome", "Recovered_Amount_INR", "Latency_MS", "Dispatched_Tools"
     ])
-
     for r in engine.audit_records:
         writer.writerow([
-            r.id, r.timestamp, r.transaction.id, r.transaction.amount, r.transaction.currency, r.transaction.decline_code.value,
-            r.transaction.issuing_bank, r.transaction.card_network.value, r.diagnosis.root_cause,
-            r.diagnosis.recovery_probability, r.optimization.chosen_action.value, r.compliance.status.value,
-            r.outcome.value, r.recovered_amount_usd, r.processing_fee_saved_usd, r.latency_ms
+            r.id,
+            time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(r.timestamp)),
+            r.transaction.amount,
+            r.transaction.issuing_bank,
+            r.transaction.card_network.value if hasattr(r.transaction.card_network, 'value') else str(r.transaction.card_network),
+            r.transaction.decline_code.value if hasattr(r.transaction.decline_code, 'value') else str(r.transaction.decline_code),
+            r.diagnosis.root_cause,
+            r.diagnosis.recovery_probability,
+            r.optimization.chosen_action.value if hasattr(r.optimization.chosen_action, 'value') else str(r.optimization.chosen_action),
+            r.compliance.status.value if hasattr(r.compliance.status, 'value') else str(r.compliance.status),
+            r.outcome.value if hasattr(r.outcome, 'value') else str(r.outcome),
+            r.recovered_amount_usd,
+            r.latency_ms,
+            "; ".join(r.dispatched_tools)
         ])
-
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
@@ -100,55 +134,90 @@ async def export_audit_csv():
         headers={"Content-Disposition": "attachment; filename=payrevive_audit_report.csv"}
     )
 
-# Webhook receiver for Stripe / Paytm / Razorpay
-@app.post("/api/webhook/payment-failed")
-async def payment_failed_webhook(payload: Dict[str, Any]):
-    data = payload.get("data", payload)
-    tx = FailedTransactionEvent(
-        amount=float(data.get("amount", 499.0)),
-        currency=data.get("currency", "INR"),
-        payment_method=PaymentMethod.UPI if "upi" in data.get("decline_code", "") else PaymentMethod.CARD,
-        decline_code=PaymentDeclineCode(data.get("decline_code", "upi_server_timeout")),
-        decline_message=data.get("decline_message", "Transaction failed"),
-        issuing_bank=data.get("issuing_bank", "HDFC Bank / GPay"),
-        card_network=CardNetwork(data.get("card_network", "UPI / NPCI")),
-        retry_count=int(data.get("retry_count", 0)),
-        customer_tenure_months=int(data.get("customer_tenure_months", 8)),
-        day_of_month=int(data.get("day_of_month", 3)),
-        time_of_day_utc=int(data.get("time_of_day_utc", 14))
-    )
-    record = await engine.process_failed_transaction(tx)
+@app.post("/api/traffic/start")
+async def start_ambient_traffic():
+    traffic_gen.start()
+    return {"status": "RUNNING", "message": "Ambient live traffic stream started"}
+
+@app.post("/api/traffic/stop")
+async def stop_ambient_traffic():
+    traffic_gen.stop()
+    return {"status": "STOPPED", "message": "Ambient live traffic stream stopped"}
+
+@app.get("/api/traffic/status")
+async def get_traffic_status():
+    return {"is_running": traffic_gen.is_running}
+
+# Ambient Bank Telemetry & Proactive Outage State-Change Endpoints
+@app.get("/api/telemetry/bank_health")
+async def get_bank_health():
+    return {k: v.model_dump() for k, v in engine.bank_telemetry.items()}
+
+@app.post("/api/telemetry/toggle_outage/{bank_id}")
+async def toggle_bank_outage(bank_id: str):
+    res = await engine.toggle_bank_outage(bank_id)
+    return res
+
+# Human-in-the-Loop & Override Endpoints
+@app.post("/api/config/hitl_mode")
+async def toggle_hitl_mode(payload: Dict[str, bool]):
+    enabled = payload.get("enabled", False)
+    engine.set_hitl_mode(enabled)
+    await engine.broadcast({
+        "type": "HITL_MODE_CHANGED",
+        "hitl_mode": enabled
+    })
+    return {"status": "success", "hitl_mode": enabled}
+
+@app.post("/api/audit/{record_id}/override")
+async def override_audit_record(record_id: str, payload: Dict[str, str]):
+    new_action = payload.get("action")
+    if not new_action:
+        raise HTTPException(status_code=400, detail="Missing action parameter")
+    record = await engine.override_record_action(record_id, new_action)
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
     return record.model_dump()
 
-class CustomWebhookRequest(BaseModel):
-    amount: float
-    currency: str = "INR"
-    decline_code: PaymentDeclineCode
-    issuing_bank: str
-    card_network: CardNetwork
-    customer_tenure_months: int = 12
-    day_of_month: int = 2
-    retry_count: int = 0
-
+# Custom Webhook Receiver
 @app.post("/api/webhook/custom")
-async def custom_webhook_simulator(req: CustomWebhookRequest):
-    tx = FailedTransactionEvent(
-        amount=req.amount,
-        currency=req.currency,
-        payment_method=PaymentMethod.UPI if "upi" in req.decline_code.value else PaymentMethod.CARD,
-        decline_code=req.decline_code,
-        decline_message=f"Issuer declined with code: {req.decline_code.value}",
-        issuing_bank=req.issuing_bank,
-        card_network=req.card_network,
-        retry_count=req.retry_count,
-        customer_tenure_months=req.customer_tenure_months,
-        day_of_month=req.day_of_month,
-        time_of_day_utc=14
-    )
-    record = await engine.process_failed_transaction(tx)
-    return record.model_dump()
+async def receive_custom_webhook(payload: Dict[str, Any]):
+    try:
+        network_str = payload.get("card_network", "UPI / NPCI")
+        network = CardNetwork.UPI_NPCI
+        if "RUPAY" in network_str:
+            network = CardNetwork.RUPAY
+        elif "VISA" in network_str:
+            network = CardNetwork.VISA
+        elif "MASTER" in network_str:
+            network = CardNetwork.MASTERCARD
 
-# Live Demo Simulation Scenarios for Hackathon Presentation
+        decline_str = payload.get("decline_code", "upi_server_timeout")
+        decline = PaymentDeclineCode.UPI_SERVER_TIMEOUT
+        for code in PaymentDeclineCode:
+            if code.value == decline_str:
+                decline = code
+                break
+
+        tx = FailedTransactionEvent(
+            amount=float(payload.get("amount", 499.0)),
+            currency=payload.get("currency", "INR"),
+            payment_method=PaymentMethod.UPI if "UPI" in network_str else PaymentMethod.CARD,
+            decline_code=decline,
+            decline_message=f"Custom Webhook: {decline.value} reported by {payload.get('issuing_bank', 'HDFC Bank')}",
+            issuing_bank=payload.get("issuing_bank", "HDFC Bank (UPI / PhonePe)"),
+            card_network=network,
+            retry_count=int(payload.get("retry_count", 0)),
+            customer_tenure_months=int(payload.get("customer_tenure_months", 12)),
+            day_of_month=int(payload.get("day_of_month", 2)),
+            time_of_day_utc=14
+        )
+        record = await engine.process_failed_transaction(tx)
+        return record.model_dump()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid webhook payload: {str(e)}")
+
+# Testbench Scenarios
 @app.post("/api/simulate/{scenario}")
 async def simulate_scenario(scenario: str):
     if scenario == "upi_timeout":
@@ -157,12 +226,12 @@ async def simulate_scenario(scenario: str):
             currency="INR",
             payment_method=PaymentMethod.UPI,
             decline_code=PaymentDeclineCode.UPI_SERVER_TIMEOUT,
-            decline_message="NPCI Gateway Timeout: HDFC Bank UPI server response latency > 6200ms",
-            issuing_bank="HDFC Bank (UPI / PhonePe)",
+            decline_message="Decline U30: NPCI UPI core banking timeout (latency > 2400ms)",
+            issuing_bank="HDFC Bank (UPI / GPay)",
             card_network=CardNetwork.UPI_NPCI,
             retry_count=0,
-            customer_tenure_months=16,
-            day_of_month=4,
+            customer_tenure_months=18,
+            day_of_month=3,
             time_of_day_utc=14
         )
     elif scenario == "upi_mandate":
@@ -171,13 +240,13 @@ async def simulate_scenario(scenario: str):
             currency="INR",
             payment_method=PaymentMethod.UPI,
             decline_code=PaymentDeclineCode.UPI_MANDATE_INSUFFICIENT_FUNDS,
-            decline_message="Decline 51: Recurring UPI AutoPay mandate balance insufficient",
-            issuing_bank="State Bank of India (GPay)",
+            decline_message="Decline M05: UPI recurring AutoPay mandate failed due to insufficient funds",
+            issuing_bank="State Bank of India (SBI)",
             card_network=CardNetwork.UPI_NPCI,
             retry_count=0,
             customer_tenure_months=8,
-            day_of_month=21,
-            time_of_day_utc=18
+            day_of_month=28,
+            time_of_day_utc=6
         )
     elif scenario == "processor_timeout":
         tx = FailedTransactionEvent(
@@ -185,27 +254,13 @@ async def simulate_scenario(scenario: str):
             currency="INR",
             payment_method=PaymentMethod.CARD,
             decline_code=PaymentDeclineCode.PROCESSOR_TIMEOUT,
-            decline_message="Gateway timeout: Bank authorization server unreachable > 8000ms",
-            issuing_bank="ICICI Bank",
+            decline_message="Gateway timeout: RuPay switch bank authorization server unreachable > 8000ms",
+            issuing_bank="Punjab National Bank (PNB)",
             card_network=CardNetwork.RUPAY,
             retry_count=0,
             customer_tenure_months=14,
             day_of_month=15,
             time_of_day_utc=10
-        )
-    elif scenario == "card_expired":
-        tx = FailedTransactionEvent(
-            amount=1499.00,
-            currency="INR",
-            payment_method=PaymentMethod.CARD,
-            decline_code=PaymentDeclineCode.CARD_EXPIRED,
-            decline_message="Decline 54: Expired card credential",
-            issuing_bank="Axis Bank",
-            card_network=CardNetwork.VISA,
-            retry_count=0,
-            customer_tenure_months=24,
-            day_of_month=5,
-            time_of_day_utc=12
         )
     elif scenario == "stolen_card":
         tx = FailedTransactionEvent(
@@ -254,35 +309,6 @@ async def simulate_scenario(scenario: str):
 
     record = await engine.process_failed_transaction(tx)
     return record.model_dump()
-
-@app.post("/api/config/hitl_mode")
-async def toggle_hitl_mode(payload: Dict[str, bool]):
-    enabled = payload.get("enabled", False)
-    engine.set_hitl_mode(enabled)
-    await engine.broadcast({
-        "type": "HITL_MODE_CHANGED",
-        "hitl_mode": enabled
-    })
-    return {"status": "success", "hitl_mode": enabled}
-
-@app.post("/api/audit/{record_id}/override")
-async def override_audit_record(record_id: str, payload: Dict[str, str]):
-    new_action = payload.get("action")
-    if not new_action:
-        raise HTTPException(status_code=400, detail="Missing action parameter")
-    record = await engine.override_record_action(record_id, new_action)
-    if not record:
-        raise HTTPException(status_code=404, detail="Record not found")
-    return record.model_dump()
-
-@app.get("/api/telemetry/bank_health")
-async def get_bank_health():
-    return {
-        "npci_switch": {"status": "HEALTHY", "uptime": "99.82%", "latency_ms": 110},
-        "hdfc_bank": {"status": "DEGRADED", "uptime": "58.40%", "latency_ms": 1850, "incident": "Core Banking Latency Spike - Rerouted to ICICI"},
-        "icici_rail": {"status": "OPTIMAL", "uptime": "99.95%", "latency_ms": 85},
-        "razorpay_gateway": {"status": "OPTIMAL", "uptime": "99.40%", "latency_ms": 130}
-    }
 
 # Mount Frontend Static Assets
 frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")

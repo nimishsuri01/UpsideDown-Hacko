@@ -33,7 +33,13 @@ import {
   Share2,
   ExternalLink,
   ChevronRight,
-  Send
+  Send,
+  Sparkles,
+  Server,
+  Globe,
+  RotateCw,
+  RefreshCw,
+  Flame
 } from 'lucide-react';
 
 const API_BASE = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
@@ -48,7 +54,7 @@ function triggerDeviceFeedback(soundEnabled = true) {
     } catch (e) {}
   }
 
-  // 2. Cybernetic Audio Chime via Web Audio API (Zero external MP3 dependency)
+  // 2. Google-Style Cybernetic Audio Chime via Web Audio API
   if (soundEnabled) {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -89,10 +95,21 @@ export default function App() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // Active View Tab: 'RADAR' (Live Stream) vs 'UPI_APP' (Mobile UPI Simulator)
+  // Active View Tab: 'RADAR' (Live Stream) vs 'UPI_APP' (Google Pay UPI Simulator)
   const [activeTab, setActiveTab] = useState('RADAR');
 
-  // Interactive Mobile UPI Checkout State
+  // Ambient Bank & Gateway Telemetry Sensor State
+  const [bankTelemetry, setBankTelemetry] = useState({
+    npci: { name: 'NPCI Central Switch', status: 'HEALTHY', latency_ms: 68, uptime_pct: 99.85, proactive_reroute_active: false },
+    hdfc: { name: 'HDFC Core UPI Node', status: 'HEALTHY', latency_ms: 92, uptime_pct: 99.7, proactive_reroute_active: false },
+    icici: { name: 'ICICI Secondary Rail', status: 'HEALTHY', latency_ms: 84, uptime_pct: 99.92, proactive_reroute_active: false },
+    razorpay: { name: 'Razorpay Gateway API', status: 'HEALTHY', latency_ms: 115, uptime_pct: 99.4, proactive_reroute_active: false }
+  });
+
+  // Ambient State-Change Event Narrative Banner
+  const [stateChangeNarrative, setStateChangeNarrative] = useState(null);
+
+  // Interactive Google Pay / UPI Checkout State
   const [upiAmount, setUpiAmount] = useState(499);
   const [upiStage, setUpiStage] = useState('IDLE'); // IDLE, PROCESSING, FAILED, RECOVERING, SUCCESS
   const [upiStageInfo, setUpiStageInfo] = useState('');
@@ -142,6 +159,7 @@ export default function App() {
             setMetrics(data.metrics || {});
             setAuditRecords(data.audit_records || []);
             if (data.hitl_mode !== undefined) setHitlMode(data.hitl_mode);
+            if (data.bank_telemetry) setBankTelemetry(data.bank_telemetry);
           } else if (data.type === 'NEW_RECOVERY_EVENT') {
             setMetrics(data.metrics || {});
             setAuditRecords((prev) => [data.record, ...prev]);
@@ -150,13 +168,21 @@ export default function App() {
             if (data.record.outcome === 'RECOVERED' || data.record.outcome === 'SCHEDULED') {
               triggerDeviceFeedback(soundEnabled);
               setToast({
-                title: '⚡ Autonomous Recovery Succeeded',
+                title: data.record.optimization.chosen_action === 'PROACTIVE_PREEMPTIVE_FAILOVER' ? 
+                  '🛡️ Proactive Sensor Failover Succeeded' : '⚡ Autonomous Recovery Succeeded',
                 amount: data.record.recovered_amount_usd,
                 action: data.record.optimization.chosen_action,
                 tools: data.record.dispatched_tools
               });
               setTimeout(() => setToast(null), 4500);
             }
+          } else if (data.type === 'BANK_STATE_CHANGE') {
+            if (data.telemetry) setBankTelemetry(data.telemetry);
+            setStateChangeNarrative(data.ai_narrative);
+            triggerDeviceFeedback(soundEnabled);
+            setTimeout(() => setStateChangeNarrative(null), 12000);
+          } else if (data.type === 'TELEMETRY_HEARTBEAT') {
+            if (data.telemetry) setBankTelemetry(data.telemetry);
           } else if (data.type === 'RECORD_UPDATED') {
             setMetrics(data.metrics || {});
             setAuditRecords((prev) => prev.map(r => r.id === data.record.id ? data.record : r));
@@ -189,6 +215,20 @@ export default function App() {
       if (wsRef.current) wsRef.current.close();
     };
   }, [soundEnabled]);
+
+  // Toggle Ambient Bank Outage / State Change (Challenge Feature: Reacting to State Changes)
+  const toggleBankOutage = async (bankId = 'hdfc') => {
+    try {
+      const res = await fetch(`${API_BASE}/api/telemetry/toggle_outage/${bankId}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.telemetry) setBankTelemetry(data.telemetry);
+      setStateChangeNarrative(data.ai_narrative);
+      triggerDeviceFeedback(soundEnabled);
+      setTimeout(() => setStateChangeNarrative(null), 9000);
+    } catch (e) {
+      console.error('Outage toggle error:', e);
+    }
+  };
 
   const toggleTraffic = async () => {
     const endpoint = trafficRunning ? '/api/traffic/stop' : '/api/traffic/start';
@@ -239,12 +279,30 @@ export default function App() {
     }
   };
 
-  // Mobile Phone UPI Payment Simulation with Autonomous Sentinel Interception
+  // Google Pay Mobile UPI Simulation
   const runMobileUpiTest = async (scenarioType) => {
     setUpiStage('PROCESSING');
     setUpiStageInfo('Initiating NPCI UPI Handshake via HDFC Bank Rail...');
 
     setTimeout(async () => {
+      // If HDFC is currently in outage, show proactive preemption!
+      if (bankTelemetry.hdfc?.proactive_reroute_active) {
+        setUpiStage('RECOVERING');
+        setUpiStageInfo('⚡ Sensor Warning: HDFC Core in Outage! Preemptively auto-routing to ICICI...');
+
+        try {
+          const res = await fetch(`${API_BASE}/api/simulate/upi_timeout`, { method: 'POST' });
+          const rec = await res.json();
+          setLastUpiRecord(rec);
+          triggerDeviceFeedback(soundEnabled);
+          setUpiStage('SUCCESS');
+          setUpiStageInfo('🛡️ Proactive Failover Complete! Direct routing to ICICI Secondary Rail in 14ms (Zero customer drop).');
+        } catch (e) {
+          setUpiStage('IDLE');
+        }
+        return;
+      }
+
       if (scenarioType === 'TIMEOUT') {
         setUpiStage('FAILED');
         setUpiStageInfo('Decline U30: HDFC UPI Core Server Timeout (>2400ms)');
@@ -252,7 +310,7 @@ export default function App() {
 
         setTimeout(async () => {
           setUpiStage('RECOVERING');
-          setUpiStageInfo('⚡ PayRevive Ambient Sentinel Intercepting failure event...');
+          setUpiStageInfo('PayRevive Ambient Sentinel Intercepting failure event...');
 
           try {
             const res = await fetch(`${API_BASE}/api/simulate/upi_timeout`, { method: 'POST' });
@@ -273,7 +331,7 @@ export default function App() {
 
         setTimeout(async () => {
           setUpiStage('RECOVERING');
-          setUpiStageInfo('⚡ PayRevive TreeSHAP Diagnosing & Scheduling Payday Retry...');
+          setUpiStageInfo('PayRevive TreeSHAP Diagnosing & Scheduling Payday Retry...');
 
           try {
             const res = await fetch(`${API_BASE}/api/simulate/upi_mandate`, { method: 'POST' });
@@ -317,308 +375,751 @@ export default function App() {
     return true;
   });
 
+  const isHdfcOutage = bankTelemetry.hdfc?.status === 'CRITICAL_OUTAGE' || bankTelemetry.hdfc?.proactive_reroute_active;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg-dark)', paddingBottom: '70px' }}>
-      {/* Top Header Bar */}
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--g-bg-base)', paddingBottom: '76px' }}>
+      
+      {/* Top Header Bar (Google Material 3 Style) */}
       <header style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: '12px 16px',
-        background: 'rgba(15, 23, 42, 0.95)',
-        borderBottom: '1px solid var(--border-subtle)',
+        padding: '12px 24px',
+        background: 'rgba(30, 31, 32, 0.85)',
+        borderBottom: '1px solid var(--g-border)',
         position: 'sticky',
         top: 0,
         zIndex: 100,
-        backdropFilter: 'blur(10px)',
+        backdropFilter: 'blur(16px)',
         flexWrap: 'wrap',
-        gap: '8px'
+        gap: '12px'
       }}>
         {/* Brand & Badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '8px',
-            background: 'linear-gradient(135deg, #10b981, #06b6d4)',
+            width: '36px',
+            height: '36px',
+            borderRadius: '12px',
+            background: 'var(--g-gemini-gradient)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 0 15px rgba(16, 185, 129, 0.4)'
+            boxShadow: '0 0 20px var(--g-gemini-glow)'
           }}>
-            <Zap size={18} color="#000" />
+            <Sparkles size={20} color="#ffffff" />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <h1 style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>
-                PAYREVIVE
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h1 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.3px', margin: 0, color: '#f8fafc' }}>
+                PayRevive
               </h1>
-              <span className="font-mono" style={{
-                background: 'rgba(16, 185, 129, 0.12)',
-                border: '1px solid rgba(16, 185, 129, 0.3)',
-                fontSize: '9px',
-                padding: '1px 5px',
-                borderRadius: '4px',
-                color: '#10b981'
+              <span style={{
+                background: 'rgba(66, 133, 244, 0.14)',
+                border: '1px solid rgba(138, 180, 248, 0.3)',
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: '9999px',
+                color: 'var(--g-blue)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
               }}>
-                PS-02 : ZERO-PROMPT AI
+                <Zap size={11} color="var(--g-blue)" />
+                PS-02 : Zero-Prompt AI
               </span>
             </div>
+            <p style={{ margin: 0, fontSize: '11px', color: 'var(--g-text-secondary)', marginTop: '2px' }}>
+              Autonomous Revenue Recovery • Google Cloud & NPCI Multi-Rail Sentinel
+            </p>
           </div>
         </div>
 
         {/* Ambient Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-          {/* Audio Chime Toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Sound Toggle */}
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
+            className="g-button"
             title={soundEnabled ? "Mute audio chimes" : "Enable audio chimes"}
             style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid var(--border-subtle)',
-              color: soundEnabled ? '#10b981' : '#64748b',
-              padding: '5px 8px',
-              borderRadius: '6px',
-              cursor: 'pointer',
+              background: 'var(--g-surface-2)',
+              border: '1px solid var(--g-border)',
+              color: soundEnabled ? 'var(--g-green)' : 'var(--g-text-tertiary)',
+              width: '34px',
+              height: '34px',
+              borderRadius: '50%',
               display: 'flex',
               alignItems: 'center',
-              fontSize: '10px'
+              justifyContent: 'center',
+              cursor: 'pointer'
             }}
           >
-            {soundEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+            {soundEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
           </button>
 
-          {/* HITL Switch */}
+          {/* HITL Control Switch */}
           <button
             onClick={toggleHitlMode}
+            className="g-button"
             title="Toggle between 100% Autonomous AI and Supervised Human-in-the-Loop Mode"
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
-              background: hitlMode ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.12)',
-              border: `1px solid ${hitlMode ? '#f59e0b' : '#10b981'}`,
-              color: hitlMode ? '#f59e0b' : '#10b981',
-              padding: '5px 8px',
-              borderRadius: '6px',
+              gap: '6px',
+              background: hitlMode ? 'var(--g-yellow-container)' : 'var(--g-green-container)',
+              border: `1px solid ${hitlMode ? 'rgba(253, 214, 99, 0.4)' : 'rgba(129, 201, 149, 0.4)'}`,
+              color: hitlMode ? 'var(--g-yellow)' : 'var(--g-green)',
+              padding: '6px 14px',
+              borderRadius: '9999px',
               cursor: 'pointer',
-              fontWeight: 700,
-              fontSize: '10px'
+              fontWeight: 600,
+              fontSize: '11px'
             }}
           >
-            {hitlMode ? <UserCheck size={12} /> : <ShieldCheck size={12} />}
-            <span>{hitlMode ? 'HITL ON' : '100% AUTO'}</span>
+            {hitlMode ? <UserCheck size={14} /> : <ShieldCheck size={14} />}
+            <span>{hitlMode ? 'Supervised Mode' : '100% Autonomous'}</span>
           </button>
 
           {/* QR Code */}
           <button
             onClick={() => setShowQRModal(true)}
+            className="g-button"
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
-              background: 'rgba(6, 182, 212, 0.15)',
-              border: '1px solid #06b6d4',
-              color: '#06b6d4',
-              padding: '5px 8px',
-              borderRadius: '6px',
+              gap: '6px',
+              background: 'var(--g-blue-container)',
+              border: '1px solid rgba(138, 180, 248, 0.3)',
+              color: 'var(--g-blue)',
+              padding: '6px 14px',
+              borderRadius: '9999px',
               cursor: 'pointer',
-              fontWeight: 700,
-              fontSize: '10px'
+              fontWeight: 600,
+              fontSize: '11px'
             }}
           >
-            <Smartphone size={12} />
-            <span>QR</span>
+            <Smartphone size={14} />
+            <span>Open on Phone</span>
           </button>
 
           {/* Continuous Traffic */}
           <button
             onClick={toggleTraffic}
+            className="g-button"
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
-              background: trafficRunning ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-              border: `1px solid ${trafficRunning ? '#ef4444' : '#10b981'}`,
-              color: trafficRunning ? '#ef4444' : '#10b981',
-              padding: '5px 8px',
-              borderRadius: '6px',
+              gap: '6px',
+              background: trafficRunning ? 'var(--g-red-container)' : 'var(--g-surface-2)',
+              border: `1px solid ${trafficRunning ? 'rgba(242, 139, 130, 0.4)' : 'var(--g-border)'}`,
+              color: trafficRunning ? 'var(--g-red)' : 'var(--g-text-primary)',
+              padding: '6px 14px',
+              borderRadius: '9999px',
               cursor: 'pointer',
-              fontWeight: 700,
-              fontSize: '10px'
+              fontWeight: 600,
+              fontSize: '11px'
             }}
           >
-            {trafficRunning ? <Square size={11} fill="#ef4444" /> : <Play size={11} fill="#10b981" />}
-            <span>{trafficRunning ? 'STOP' : 'STREAM'}</span>
+            {trafficRunning ? <Square size={13} fill="var(--g-red)" /> : <Play size={13} fill="var(--g-green)" />}
+            <span>{trafficRunning ? 'Stop Stream' : 'Live Stream'}</span>
           </button>
 
-          {/* WebSocket Status */}
-          <span style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            background: connected ? '#10b981' : '#ef4444',
-            boxShadow: connected ? '0 0 8px #10b981' : 'none'
-          }} />
+          {/* WebSocket Status Indicator */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '11px',
+            color: connected ? 'var(--g-green)' : 'var(--g-red)',
+            padding: '5px 10px',
+            background: 'var(--g-surface-2)',
+            borderRadius: '9999px',
+            border: '1px solid var(--g-border)'
+          }}>
+            <span style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: connected ? 'var(--g-green)' : 'var(--g-red)',
+              boxShadow: connected ? '0 0 8px var(--g-green)' : 'none'
+            }} />
+            <span className="font-mono">{connected ? 'ONLINE' : 'CONNECTING'}</span>
+          </div>
         </div>
       </header>
 
-      {/* Floating Toast Notification on Recovery */}
+      {/* Floating Google-Style Toast Notification on Recovery */}
       {toast && (
         <div style={{
           position: 'fixed',
-          top: '65px',
-          right: '16px',
+          top: '72px',
+          right: '20px',
           zIndex: 999,
-          background: 'rgba(15, 23, 42, 0.95)',
-          border: '1px solid #10b981',
-          boxShadow: '0 10px 25px rgba(16, 185, 129, 0.3)',
-          borderRadius: '8px',
-          padding: '10px 14px',
+          background: 'var(--g-surface-2)',
+          border: '1px solid rgba(129, 201, 149, 0.5)',
+          boxShadow: '0 12px 36px rgba(0, 0, 0, 0.5)',
+          borderRadius: '14px',
+          padding: '12px 18px',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
-          maxWidth: '360px',
-          animation: 'slideIn 0.3s ease-out'
+          gap: '12px',
+          maxWidth: '380px',
+          animation: 'slideDownToast 0.25s cubic-bezier(0.2, 0, 0, 1)'
         }}>
-          <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Zap size={14} color="#10b981" />
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            background: 'var(--g-green-container)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <CheckCircle2 size={18} color="var(--g-green)" />
           </div>
           <div>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: '#10b981' }}>{toast.title}</div>
-            <div style={{ fontSize: '10px', color: '#e2e8f0', marginTop: '1px' }}>
-              Recovered <b>₹{toast.amount}</b> via <code>{toast.action}</code>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--g-green)' }}>{toast.title}</div>
+            <div style={{ fontSize: '11px', color: 'var(--g-text-secondary)', marginTop: '2px' }}>
+              Recovered <b style={{ color: '#fff' }}>₹{toast.amount}</b> via {toast.action}
             </div>
           </div>
-          <button onClick={() => setToast(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', marginLeft: 'auto' }}>
-            <X size={13} />
+          <button onClick={() => setToast(null)} style={{ background: 'transparent', border: 'none', color: 'var(--g-text-tertiary)', cursor: 'pointer', marginLeft: 'auto' }}>
+            <X size={15} />
           </button>
         </div>
       )}
 
       {/* Main Content Area */}
-      <main style={{ flex: 1, padding: '14px 16px', maxWidth: '1440px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+      <main style={{ flex: 1, padding: '16px 24px', maxWidth: '1440px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
         
-        {/* Ambient Gateway & Bank Telemetry Sensor Strip */}
+        {/* DEDICATED AMBIENT BANK & GATEWAY HEALTH SENTINEL (REACTS TO STATE CHANGES & SENSOR TELEMETRY) */}
         <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          background: 'rgba(15, 23, 42, 0.75)',
-          border: '1px solid rgba(56, 189, 248, 0.25)',
-          padding: '8px 12px',
-          borderRadius: '8px',
-          marginBottom: '14px',
-          fontSize: '11px',
-          overflowX: 'auto',
-          whiteSpace: 'nowrap'
+          background: isHdfcOutage ? 'linear-gradient(180deg, rgba(242, 139, 130, 0.12) 0%, var(--g-surface-1) 100%)' : 'var(--g-surface-1)',
+          border: `1px solid ${isHdfcOutage ? 'rgba(242, 139, 130, 0.5)' : 'var(--g-border)'}`,
+          borderRadius: '20px',
+          padding: '18px 22px',
+          marginBottom: '20px',
+          boxShadow: isHdfcOutage ? '0 8px 32px rgba(242, 139, 130, 0.15)' : '0 4px 20px rgba(0, 0, 0, 0.25)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#38bdf8', fontWeight: 700 }}>
-            <Activity size={13} color="#38bdf8" />
-            <span>BANK SENSOR:</span>
+          {/* Header Row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: isHdfcOutage ? 'var(--g-red-container)' : 'var(--g-blue-container)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: `1px solid ${isHdfcOutage ? 'rgba(242, 139, 130, 0.5)' : 'rgba(138, 180, 248, 0.4)'}`
+              }}>
+                <Radio size={18} color={isHdfcOutage ? 'var(--g-red)' : 'var(--g-blue)'} className="pulse-indicator" />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.3px' }}>
+                    AMBIENT BANK & GATEWAY HEALTH SENTINEL
+                  </span>
+                  <span style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    background: 'var(--g-surface-2)',
+                    color: 'var(--g-green)',
+                    border: '1px solid rgba(129, 201, 149, 0.3)',
+                    padding: '1px 7px',
+                    borderRadius: '9999px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--g-green)' }}></span>
+                    LIVE POLLING (3.2s)
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--g-text-secondary)', marginTop: '2px' }}>
+                  Zero-Prompt background sensor monitoring NPCI switch & core banking latency SLA thresholds (&gt;1200ms)
+                </div>
+              </div>
+            </div>
+
+            {/* Active Routing Cache Indicator */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: isHdfcOutage ? 'var(--g-red-container)' : 'var(--g-surface-2)',
+              border: `1px solid ${isHdfcOutage ? 'var(--g-red)' : 'var(--g-border)'}`,
+              padding: '6px 14px',
+              borderRadius: '9999px',
+              fontSize: '11px'
+            }}>
+              <span style={{ color: 'var(--g-text-secondary)', fontWeight: 500 }}>Active Route:</span>
+              <span style={{ color: isHdfcOutage ? 'var(--g-red)' : 'var(--g-green)', fontWeight: 800 }}>
+                {isHdfcOutage ? '⚡ ICICI SECONDARY RAIL (PROACTIVELY FAILOVERED)' : '🟢 HDFC PRIMARY UPI RAIL (OPTIMAL)'}
+              </span>
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10b981' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
-              NPCI UPI: <b>99.8% Healthy</b> (110ms)
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#ef4444' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }}></span>
-              HDFC Core UPI: <b>OUTAGE (1850ms)</b> ➔ Auto-Failover to ICICI
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10b981' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
-              ICICI Backup Rail: <b>ACTIVE (85ms)</b>
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#38bdf8' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#38bdf8' }}></span>
-              Razorpay Gateway: <b>99.4% Active</b>
-            </span>
+
+          {/* Telemetry Node Cards Grid */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+            gap: '12px',
+            marginBottom: '16px'
+          }}>
+            {/* 1. NPCI Central Switch */}
+            <div style={{
+              background: 'var(--g-surface-2)',
+              border: `1px solid ${bankTelemetry.npci?.status === 'CRITICAL_OUTAGE' ? 'var(--g-red)' : 'var(--g-border)'}`,
+              borderRadius: '14px',
+              padding: '12px 14px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Globe size={13} color="var(--g-blue)" />
+                  NPCI Central Switch
+                </span>
+                <span style={{
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  color: bankTelemetry.npci?.status === 'CRITICAL_OUTAGE' ? 'var(--g-red)' : 'var(--g-green)',
+                  background: bankTelemetry.npci?.status === 'CRITICAL_OUTAGE' ? 'var(--g-red-container)' : 'var(--g-green-container)',
+                  padding: '1px 6px',
+                  borderRadius: '9999px'
+                }}>
+                  {bankTelemetry.npci?.status === 'CRITICAL_OUTAGE' ? 'CONGESTED' : 'OPTIMAL'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: bankTelemetry.npci?.status === 'CRITICAL_OUTAGE' ? 'var(--g-red)' : '#f8fafc' }}>
+                  {bankTelemetry.npci?.latency_ms || 68} <span style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>ms ping</span>
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--g-text-secondary)' }}>
+                  Uptime: <b style={{ color: 'var(--g-green)' }}>{bankTelemetry.npci?.uptime_pct}%</b>
+                </div>
+              </div>
+              <button
+                onClick={() => toggleBankOutage('npci')}
+                style={{
+                  marginTop: '10px',
+                  width: '100%',
+                  background: 'transparent',
+                  border: '1px dashed var(--g-border)',
+                  color: 'var(--g-text-secondary)',
+                  borderRadius: '8px',
+                  padding: '4px',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                {bankTelemetry.npci?.status === 'CRITICAL_OUTAGE' ? '✓ Restore NPCI' : '⚡ Simulate NPCI Surge'}
+              </button>
+            </div>
+
+            {/* 2. HDFC Core UPI Node (The Main Star for Judges) */}
+            <div style={{
+              background: isHdfcOutage ? 'rgba(242, 139, 130, 0.15)' : 'var(--g-surface-2)',
+              border: `2px solid ${isHdfcOutage ? 'var(--g-red)' : 'rgba(138, 180, 248, 0.3)'}`,
+              borderRadius: '14px',
+              padding: '12px 14px',
+              boxShadow: isHdfcOutage ? '0 0 16px rgba(242, 139, 130, 0.25)' : 'none'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: isHdfcOutage ? 'var(--g-red)' : '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Server size={13} color={isHdfcOutage ? 'var(--g-red)' : 'var(--g-blue)'} />
+                  HDFC Core UPI Node
+                </span>
+                <span style={{
+                  fontSize: '9px',
+                  fontWeight: 800,
+                  color: isHdfcOutage ? '#fff' : 'var(--g-green)',
+                  background: isHdfcOutage ? 'var(--g-red)' : 'var(--g-green-container)',
+                  padding: '2px 8px',
+                  borderRadius: '9999px',
+                  animation: isHdfcOutage ? 'pulse 1.5s infinite' : 'none'
+                }}>
+                  {isHdfcOutage ? 'CRITICAL OUTAGE' : 'HEALTHY'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <div style={{ fontSize: '18px', fontWeight: 900, color: isHdfcOutage ? 'var(--g-red)' : '#f8fafc' }}>
+                  {bankTelemetry.hdfc?.latency_ms || 92} <span style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>ms {isHdfcOutage ? '(>1200ms SLA!)' : 'ping'}</span>
+                </div>
+                <div style={{ fontSize: '10px', color: isHdfcOutage ? 'var(--g-red)' : 'var(--g-text-secondary)', fontWeight: 600 }}>
+                  {isHdfcOutage ? '48.6% Failure Rate' : '0.3% Optimal'}
+                </div>
+              </div>
+              <button
+                onClick={() => toggleBankOutage('hdfc')}
+                className="g-button"
+                style={{
+                  marginTop: '10px',
+                  width: '100%',
+                  background: isHdfcOutage ? 'var(--g-green)' : 'rgba(242, 139, 130, 0.22)',
+                  color: isHdfcOutage ? '#041e49' : 'var(--g-red)',
+                  border: `1px solid ${isHdfcOutage ? 'transparent' : 'var(--g-red)'}`,
+                  borderRadius: '8px',
+                  padding: '5px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                {isHdfcOutage ? (
+                  <>
+                    <RefreshCw size={13} />
+                    <span>✓ Restore HDFC Health (88ms)</span>
+                  </>
+                ) : (
+                  <>
+                    <Flame size={13} />
+                    <span>⚡ Simulate HDFC Outage (2450ms)</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* 3. ICICI Secondary Rail (The Failover Target) */}
+            <div style={{
+              background: isHdfcOutage ? 'rgba(129, 201, 149, 0.15)' : 'var(--g-surface-2)',
+              border: `2px solid ${isHdfcOutage ? 'var(--g-green)' : 'var(--g-border)'}`,
+              borderRadius: '14px',
+              padding: '12px 14px',
+              boxShadow: isHdfcOutage ? '0 0 16px rgba(129, 201, 149, 0.25)' : 'none'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: isHdfcOutage ? 'var(--g-green)' : '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Zap size={13} color={isHdfcOutage ? 'var(--g-green)' : 'var(--g-text-secondary)'} />
+                  ICICI Secondary Rail
+                </span>
+                <span style={{
+                  fontSize: '9px',
+                  fontWeight: 800,
+                  color: isHdfcOutage ? '#041e49' : 'var(--g-text-secondary)',
+                  background: isHdfcOutage ? 'var(--g-green)' : 'var(--g-surface-3)',
+                  padding: '2px 8px',
+                  borderRadius: '9999px'
+                }}>
+                  {isHdfcOutage ? '⚡ ACTIVE FAILOVER' : 'HOT STANDBY'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: isHdfcOutage ? 'var(--g-green)' : '#f8fafc' }}>
+                  {bankTelemetry.icici?.latency_ms || 84} <span style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>ms ping</span>
+                </div>
+                <div style={{ fontSize: '10px', color: isHdfcOutage ? 'var(--g-green)' : 'var(--g-text-secondary)', fontWeight: 600 }}>
+                  {isHdfcOutage ? '100% Traffic Load' : '99.92% Uptime'}
+                </div>
+              </div>
+              <div style={{
+                marginTop: '10px',
+                fontSize: '10px',
+                color: isHdfcOutage ? 'var(--g-green)' : 'var(--g-text-tertiary)',
+                textAlign: 'center',
+                padding: '4px',
+                background: isHdfcOutage ? 'rgba(129, 201, 149, 0.2)' : 'transparent',
+                borderRadius: '8px',
+                fontWeight: 600
+              }}>
+                {isHdfcOutage ? '🛡️ ZERO-DOWNTIME ACTIVE' : 'Hot-Sync Standby Rail'}
+              </div>
+            </div>
+
+            {/* 4. Razorpay Gateway API */}
+            <div style={{
+              background: 'var(--g-surface-2)',
+              border: '1px solid var(--g-border)',
+              borderRadius: '14px',
+              padding: '12px 14px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <ShieldCheck size={13} color="var(--g-blue)" />
+                  Razorpay Gateway API
+                </span>
+                <span style={{
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  color: 'var(--g-blue)',
+                  background: 'var(--g-blue-container)',
+                  padding: '1px 6px',
+                  borderRadius: '9999px'
+                }}>
+                  ACTIVE
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc' }}>
+                  {bankTelemetry.razorpay?.latency_ms || 115} <span style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>ms ping</span>
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--g-text-secondary)' }}>
+                  Uptime: <b style={{ color: 'var(--g-blue)' }}>{bankTelemetry.razorpay?.uptime_pct}%</b>
+                </div>
+              </div>
+              <div style={{
+                marginTop: '10px',
+                fontSize: '10px',
+                color: 'var(--g-text-tertiary)',
+                textAlign: 'center',
+                padding: '4px'
+              }}>
+                Card & Mandate Fallback Rail
+              </div>
+            </div>
+          </div>
+
+          {/* Real-time Dynamic Routing Visualizer Flow */}
+          <div style={{
+            background: 'var(--g-surface-2)',
+            border: '1px solid var(--g-border)',
+            borderRadius: '12px',
+            padding: '10px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '10px',
+            fontSize: '11px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--g-text-secondary)', fontWeight: 600 }}>
+              <Activity size={14} color="var(--g-blue)" />
+              <span>LIVE TRAFFIC PIPELINE:</span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <span style={{ color: '#f8fafc', fontWeight: 700 }}>[Customer UPI Checkout]</span>
+              <span style={{ color: 'var(--g-text-tertiary)' }}>➔</span>
+              
+              {isHdfcOutage ? (
+                <>
+                  <span style={{
+                    color: 'var(--g-red)',
+                    fontWeight: 800,
+                    textDecoration: 'line-through',
+                    background: 'var(--g-red-container)',
+                    padding: '2px 8px',
+                    borderRadius: '6px'
+                  }}>
+                    [HDFC Core 2450ms TIMEOUT]
+                  </span>
+                  <span style={{ color: 'var(--g-green)', fontWeight: 800 }}>⚡ BYPASS ➔</span>
+                  <span style={{
+                    color: 'var(--g-green)',
+                    fontWeight: 800,
+                    background: 'var(--g-green-container)',
+                    border: '1px solid var(--g-green)',
+                    padding: '2px 10px',
+                    borderRadius: '6px'
+                  }}>
+                    [ICICI Secondary Rail (84ms)]
+                  </span>
+                </>
+              ) : (
+                <span style={{
+                  color: 'var(--g-green)',
+                  fontWeight: 700,
+                  background: 'var(--g-surface-3)',
+                  padding: '2px 8px',
+                  borderRadius: '6px'
+                }}>
+                  [HDFC Primary Node (92ms)]
+                </span>
+              )}
+
+              <span style={{ color: 'var(--g-text-tertiary)' }}>➔</span>
+              <span style={{ color: '#f8fafc', fontWeight: 700 }}>[NPCI Switch]</span>
+              <span style={{ color: 'var(--g-text-tertiary)' }}>➔</span>
+              <span style={{ color: 'var(--g-green)', fontWeight: 700 }}>[Merchant Settlement (0ms Churn)]</span>
+            </div>
           </div>
         </div>
 
-        {/* TAB 1: INTERACTIVE MOBILE UPI APP EXPERIENCE (PHONEPE / GPAY VIEW) */}
-        {activeTab === 'UPI_APP' && (
-          <div style={{ maxWidth: '440px', margin: '0 auto 20px auto' }}>
+        {/* PROACTIVE STATE-CHANGE AI NARRATIVE BANNER (PROVES AI RESPONDS TO STATE CHANGES) */}
+        {stateChangeNarrative && (
+          <div style={{
+            background: isHdfcOutage ? 'rgba(242, 139, 130, 0.14)' : 'rgba(129, 201, 149, 0.14)',
+            border: `1px solid ${isHdfcOutage ? 'var(--g-red)' : 'var(--g-green)'}`,
+            borderRadius: '14px',
+            padding: '12px 18px',
+            marginBottom: '18px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            animation: 'slideDownToast 0.3s cubic-bezier(0.2, 0, 0, 1)',
+            boxShadow: isHdfcOutage ? '0 8px 30px rgba(242, 139, 130, 0.2)' : '0 8px 30px rgba(129, 201, 149, 0.2)'
+          }}>
             <div style={{
-              background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
-              border: '2px solid rgba(6, 182, 212, 0.4)',
-              borderRadius: '16px',
-              padding: '20px',
-              boxShadow: '0 15px 35px rgba(0, 0, 0, 0.6)'
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              background: isHdfcOutage ? 'var(--g-red-container)' : 'var(--g-green-container)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
             }}>
-              {/* Phone App Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Smartphone size={16} color="#fff" />
+              <Zap size={16} color={isHdfcOutage ? 'var(--g-red)' : 'var(--g-green)'} />
+            </div>
+            <div style={{ flex: 1, fontSize: '12px', fontWeight: 600, color: '#f8fafc', lineHeight: '1.4' }}>
+              <div>{stateChangeNarrative}</div>
+              {isHdfcOutage && (
+                <button
+                  onClick={() => runSimulation('upi_timeout')}
+                  style={{
+                    marginTop: '6px',
+                    background: 'var(--g-blue-container)',
+                    color: 'var(--g-blue)',
+                    border: '1px solid rgba(138, 180, 248, 0.4)',
+                    borderRadius: '6px',
+                    padding: '3px 10px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Play size={10} />
+                  <span>Test UPI Preemptive Failover (Simulate ₹499 Payment)</span>
+                </button>
+              )}
+            </div>
+            <button onClick={() => setStateChangeNarrative(null)} style={{ background: 'transparent', border: 'none', color: 'var(--g-text-tertiary)', cursor: 'pointer' }}>
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* TAB 1: GOOGLE PAY / UPI SIMULATOR EXPERIENCE */}
+        {activeTab === 'UPI_APP' && (
+          <div style={{ maxWidth: '440px', margin: '0 auto 24px auto' }}>
+            <div style={{
+              background: 'var(--g-surface-1)',
+              border: '1px solid rgba(138, 180, 248, 0.3)',
+              borderRadius: '24px',
+              padding: '24px',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)'
+            }}>
+              {/* Google Pay Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--g-border)', paddingBottom: '14px', marginBottom: '18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    background: 'var(--g-surface-2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid rgba(138, 180, 248, 0.4)'
+                  }}>
+                    <Smartphone size={16} color="var(--g-blue)" />
                   </div>
                   <div>
-                    <div style={{ fontSize: '13px', fontWeight: 800 }}>UPI Secure Pay</div>
-                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>NPCI Verified Rail</div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc' }}>Google Pay</div>
+                    <div style={{ fontSize: '10px', color: 'var(--g-text-tertiary)' }}>UPI Secured • Zero-Prompt Protected</div>
                   </div>
                 </div>
-                <div className="font-mono" style={{ fontSize: '10px', color: '#10b981', background: 'rgba(16,185,129,0.15)', padding: '2px 6px', borderRadius: '4px' }}>
-                  PROTECTED BY PAYREVIVE
+                <div style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  color: isHdfcOutage ? 'var(--g-yellow)' : 'var(--g-green)',
+                  background: isHdfcOutage ? 'var(--g-yellow-container)' : 'var(--g-green-container)',
+                  padding: '3px 8px',
+                  borderRadius: '9999px',
+                  border: `1px solid ${isHdfcOutage ? 'rgba(253, 214, 99, 0.4)' : 'rgba(129, 201, 149, 0.3)'}`
+                }}>
+                  {isHdfcOutage ? 'FAILOVER ACTIVE' : 'ACTIVE SENTINEL'}
                 </div>
               </div>
 
-              {/* Bill Details */}
-              <div style={{ textAlign: 'center', margin: '14px 0' }}>
-                <div style={{ fontSize: '11px', color: '#94a3b8' }}>Paying to Merchant:</div>
-                <div style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc', marginTop: '2px' }}>
+              {/* Bill Details (Google Pay Card Style) */}
+              <div style={{
+                background: 'var(--g-surface-2)',
+                borderRadius: '16px',
+                padding: '18px',
+                textAlign: 'center',
+                border: '1px solid var(--g-border)',
+                marginBottom: '18px'
+              }}>
+                <div style={{ fontSize: '11px', color: 'var(--g-text-tertiary)' }}>Paying Merchant:</div>
+                <div style={{ fontSize: '15px', fontWeight: 700, color: '#f8fafc', marginTop: '2px' }}>
                   Swiggy / Zomato Express (Food Delivery)
                 </div>
-                <div className="font-mono" style={{ fontSize: '28px', fontWeight: 900, color: '#10b981', margin: '10px 0' }}>
+                <div className="font-mono" style={{ fontSize: '32px', fontWeight: 900, color: 'var(--g-text-primary)', margin: '12px 0 6px 0' }}>
                   ₹{upiAmount}.00
                 </div>
-                <div style={{ fontSize: '10px', color: '#64748b' }}>
-                  Linked VPA: customer@okhdfcbank • HDFC Bank Primary
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'var(--g-surface-3)',
+                  padding: '4px 10px',
+                  borderRadius: '9999px',
+                  fontSize: '10px',
+                  color: isHdfcOutage ? 'var(--g-yellow)' : 'var(--g-text-secondary)'
+                }}>
+                  <CreditCard size={12} color={isHdfcOutage ? 'var(--g-yellow)' : 'var(--g-blue)'} />
+                  <span>{isHdfcOutage ? 'HDFC Node Degraded (Auto-Rerouting to ICICI Rail)' : 'HDFC Bank UPI ••••4821'}</span>
                 </div>
               </div>
 
               {/* Live Status Animation Box */}
               {upiStage !== 'IDLE' && (
                 <div style={{
-                  padding: '14px',
-                  borderRadius: '10px',
-                  background: upiStage === 'PROCESSING' ? 'rgba(56, 189, 248, 0.1)' :
-                              upiStage === 'FAILED' ? 'rgba(239, 68, 68, 0.15)' :
-                              upiStage === 'RECOVERING' ? 'rgba(168, 85, 247, 0.18)' :
-                              'rgba(16, 185, 129, 0.18)',
+                  padding: '16px',
+                  borderRadius: '14px',
+                  background: upiStage === 'PROCESSING' ? 'var(--g-blue-container)' :
+                              upiStage === 'FAILED' ? 'var(--g-red-container)' :
+                              upiStage === 'RECOVERING' ? 'rgba(155, 114, 207, 0.16)' :
+                              'var(--g-green-container)',
                   border: `1px solid ${
-                    upiStage === 'PROCESSING' ? '#38bdf8' :
-                    upiStage === 'FAILED' ? '#ef4444' :
-                    upiStage === 'RECOVERING' ? '#a855f7' :
-                    '#10b981'
+                    upiStage === 'PROCESSING' ? 'rgba(138, 180, 248, 0.4)' :
+                    upiStage === 'FAILED' ? 'rgba(242, 139, 130, 0.5)' :
+                    upiStage === 'RECOVERING' ? 'rgba(155, 114, 207, 0.5)' :
+                    'rgba(129, 201, 149, 0.5)'
                   }`,
-                  marginBottom: '16px',
+                  marginBottom: '18px',
                   textAlign: 'center'
                 }}>
-                  <div style={{ fontSize: '12px', fontWeight: 700, color: upiStage === 'FAILED' ? '#ef4444' : upiStage === 'SUCCESS' ? '#10b981' : '#38bdf8' }}>
-                    {upiStage === 'PROCESSING' && '⏳ Step 1: Processing UPI request with Bank...'}
-                    {upiStage === 'FAILED' && '✕ Step 2: Bank Failure Detected!'}
-                    {upiStage === 'RECOVERING' && '⚡ Step 3: Zero-Prompt AI Sentinel Intercepting...'}
-                    {upiStage === 'SUCCESS' && '🎉 Step 4: Autonomous Recovery Completed!'}
+                  <div style={{
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    color: upiStage === 'FAILED' ? 'var(--g-red)' : upiStage === 'SUCCESS' ? 'var(--g-green)' : 'var(--g-blue)'
+                  }}>
+                    {upiStage === 'PROCESSING' && 'Step 1: Processing UPI request with Bank...'}
+                    {upiStage === 'FAILED' && '✕ Step 2: HDFC Bank Server Timeout!'}
+                    {upiStage === 'RECOVERING' && '⚡ Step 3: Zero-Prompt AI Intercepting...'}
+                    {upiStage === 'SUCCESS' && '🎉 Step 4: Autonomous Failover Recovered!'}
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--g-text-secondary)', marginTop: '4px' }}>
                     {upiStageInfo}
                   </div>
                 </div>
               )}
 
-              {/* Action Buttons for Judges to Tap on Mobile */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <button
                   onClick={() => runMobileUpiTest('TIMEOUT')}
                   disabled={upiStage === 'PROCESSING' || upiStage === 'RECOVERING'}
+                  className="g-button"
                   style={{
-                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                    color: '#fff',
+                    background: 'var(--g-blue)',
+                    color: '#041e49',
                     border: 'none',
-                    padding: '12px',
-                    borderRadius: '8px',
+                    padding: '14px',
+                    borderRadius: '9999px',
                     fontSize: '13px',
                     fontWeight: 700,
                     cursor: 'pointer',
@@ -626,24 +1127,25 @@ export default function App() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
-                    boxShadow: '0 4px 15px rgba(2, 132, 199, 0.3)'
+                    boxShadow: '0 4px 15px rgba(66, 133, 244, 0.3)'
                   }}
                 >
                   <Zap size={16} />
-                  <span>📱 Tap to Pay (Trigger UPI Timeout)</span>
+                  <span>{isHdfcOutage ? '⚡ Tap to Pay (Trigger Preemptive Failover)' : 'Tap to Pay (Simulate Bank Timeout)'}</span>
                 </button>
 
                 <button
                   onClick={() => runMobileUpiTest('MANDATE')}
                   disabled={upiStage === 'PROCESSING' || upiStage === 'RECOVERING'}
+                  className="g-button"
                   style={{
-                    background: 'rgba(245, 158, 11, 0.15)',
-                    color: '#f59e0b',
-                    border: '1px solid #f59e0b',
-                    padding: '10px',
-                    borderRadius: '8px',
+                    background: 'var(--g-surface-2)',
+                    color: 'var(--g-yellow)',
+                    border: '1px solid rgba(253, 214, 99, 0.3)',
+                    padding: '12px',
+                    borderRadius: '9999px',
                     fontSize: '12px',
-                    fontWeight: 700,
+                    fontWeight: 600,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -652,24 +1154,25 @@ export default function App() {
                   }}
                 >
                   <Clock size={15} />
-                  <span>📅 AutoPay Mandate (Trigger Insufficient Funds)</span>
+                  <span>AutoPay Mandate (Trigger Insufficient Funds)</span>
                 </button>
 
                 {upiStage === 'SUCCESS' && (
                   <button
                     onClick={() => { setUpiStage('IDLE'); setUpiStageInfo(''); }}
+                    className="g-button"
                     style={{
                       background: 'transparent',
-                      color: '#94a3b8',
-                      border: '1px dashed #475569',
+                      color: 'var(--g-text-secondary)',
+                      border: '1px dashed var(--g-border)',
                       padding: '8px',
-                      borderRadius: '6px',
+                      borderRadius: '8px',
                       fontSize: '11px',
                       cursor: 'pointer',
                       marginTop: '4px'
                     }}
                   >
-                    Reset UPI Payment Simulator
+                    Reset UPI Simulator
                   </button>
                 )}
               </div>
@@ -677,66 +1180,66 @@ export default function App() {
           </div>
         )}
 
-        {/* 4 Metric Counter Cards */}
+        {/* 4 Metric Counter Cards (Google Cloud Dashboard Style) */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '10px',
-          marginBottom: '16px'
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: '14px',
+          marginBottom: '22px'
         }}>
           {/* Revenue at Risk */}
-          <div style={metricCardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '11px' }}>
+          <div className="g-card" style={metricCardStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--g-text-secondary)', fontSize: '12px', fontWeight: 500 }}>
               <span>REVENUE AT RISK</span>
-              <AlertCircle size={14} color="#ef4444" />
+              <AlertCircle size={16} color="var(--g-red)" />
             </div>
-            <div className="font-mono" style={{ fontSize: '20px', fontWeight: 800, marginTop: '4px', color: '#ef4444' }}>
+            <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: 'var(--g-red)' }}>
               ₹{metrics.total_at_risk_usd ? metrics.total_at_risk_usd.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}
             </div>
-            <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              {metrics.total_events || 0} failed events
+            <div style={{ fontSize: '11px', color: 'var(--g-text-tertiary)', marginTop: '4px' }}>
+              From {metrics.total_events || 0} failed transaction events
             </div>
           </div>
 
           {/* Autonomous Recovered */}
-          <div style={{ ...metricCardStyle, border: '1px solid rgba(16, 185, 129, 0.4)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#10b981', fontSize: '11px' }}>
+          <div className="g-card" style={{ ...metricCardStyle, border: '1px solid rgba(129, 201, 149, 0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--g-green)', fontSize: '12px', fontWeight: 500 }}>
               <span>AUTONOMOUS RECOVERED</span>
-              <Banknote size={14} color="#10b981" />
+              <Banknote size={16} color="var(--g-green)" />
             </div>
-            <div className="font-mono" style={{ fontSize: '20px', fontWeight: 800, marginTop: '4px', color: '#10b981' }}>
+            <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: 'var(--g-green)' }}>
               ₹{metrics.total_recovered_usd ? metrics.total_recovered_usd.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}
             </div>
-            <div style={{ fontSize: '9px', color: '#10b981', marginTop: '2px' }}>
-              Recovered without chat prompts
+            <div style={{ fontSize: '11px', color: 'var(--g-green)', marginTop: '4px' }}>
+              Recovered without manual chat prompts
             </div>
           </div>
 
-          {/* Fees Saved */}
-          <div style={metricCardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '11px' }}>
+          {/* Fees Preserved */}
+          <div className="g-card" style={metricCardStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--g-text-secondary)', fontSize: '12px', fontWeight: 500 }}>
               <span>FEES PRESERVED</span>
-              <PiggyBank size={14} color="#06b6d4" />
+              <PiggyBank size={16} color="var(--g-blue)" />
             </div>
-            <div className="font-mono" style={{ fontSize: '20px', fontWeight: 800, marginTop: '4px', color: '#06b6d4' }}>
+            <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: 'var(--g-blue)' }}>
               ₹{metrics.total_fees_saved_usd ? (metrics.total_fees_saved_usd * 85).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}
             </div>
-            <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              {metrics.compliance_blocks || 0} compliance blocks
+            <div style={{ fontSize: '11px', color: 'var(--g-text-tertiary)', marginTop: '4px' }}>
+              {metrics.compliance_blocks || 0} regulatory blocks enforced
             </div>
           </div>
 
           {/* Net Recovery Rate */}
-          <div style={metricCardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '11px' }}>
-              <span>RECOVERY RATE</span>
-              <TrendingUp size={14} color="#a855f7" />
+          <div className="g-card" style={metricCardStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--g-text-secondary)', fontSize: '12px', fontWeight: 500 }}>
+              <span>RECOVERY EFFICIENCY</span>
+              <TrendingUp size={16} color="#c084fc" />
             </div>
-            <div className="font-mono" style={{ fontSize: '20px', fontWeight: 800, marginTop: '4px', color: '#a855f7' }}>
+            <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: '#c084fc' }}>
               {metrics.recovery_rate_pct ? metrics.recovery_rate_pct.toFixed(1) : '0.0'}%
             </div>
-            <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Multi-Armed Bandit ROI
+            <div style={{ fontSize: '11px', color: 'var(--g-text-tertiary)', marginTop: '4px' }}>
+              Contextual Multi-Armed Bandit ROI
             </div>
           </div>
         </div>
@@ -744,137 +1247,150 @@ export default function App() {
         {/* TAB 2: AUTONOMOUS AUDIT STREAM & SIMULATION BAR */}
         {activeTab === 'RADAR' && (
           <>
-            {/* Interactive Ambient Simulation Bar */}
-            <section style={{
-              background: 'var(--bg-card)',
-              border: '1px solid var(--border-active)',
-              borderRadius: '10px',
-              padding: '14px',
-              marginBottom: '20px'
+            {/* Interactive Testbench (Google Cloud Run Style) */}
+            <section className="g-card" style={{
+              background: 'var(--g-surface-1)',
+              border: '1px solid var(--g-border)',
+              borderRadius: '16px',
+              padding: '18px',
+              marginBottom: '24px'
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Zap size={15} color="#10b981" />
-                    <h2 style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>
-                      MOBILE UPI & MULTI-RAIL TESTBENCH
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Zap size={16} color="var(--g-blue)" />
+                    <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
+                      UPI & MULTI-RAIL SCENARIO TESTBENCH
                     </h2>
                   </div>
-                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
-                    Simulate real UPI bank server dropouts, mandate expiry, and regulatory checks.
+                  <p style={{ fontSize: '11px', color: 'var(--g-text-secondary)', margin: '2px 0 0 0' }}>
+                    Trigger ambient real-world payment failures or live bank core outages to test proactive AI preemption.
                   </p>
                 </div>
                 <button
                   onClick={() => setShowCustomModal(true)}
+                  className="g-button"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
-                    background: 'rgba(6, 182, 212, 0.15)',
-                    border: '1px solid #06b6d4',
-                    color: '#06b6d4',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    fontSize: '10px',
-                    fontWeight: 700,
+                    gap: '6px',
+                    background: 'var(--g-blue-container)',
+                    border: '1px solid rgba(138, 180, 248, 0.3)',
+                    color: 'var(--g-blue)',
+                    padding: '6px 14px',
+                    borderRadius: '9999px',
+                    fontSize: '11px',
+                    fontWeight: 600,
                     cursor: 'pointer'
                   }}
                 >
-                  <PlusCircle size={12} />
-                  <span>CUSTOM</span>
+                  <PlusCircle size={13} />
+                  <span>Custom Webhook</span>
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
                 <button
                   onClick={() => triggerSimulation('upi_timeout')}
                   disabled={simulating !== null}
-                  style={simBtnStyle}
+                  className="g-button"
+                  style={{
+                    ...simBtnStyle,
+                    border: isHdfcOutage ? '1px solid rgba(242, 139, 130, 0.4)' : '1px solid var(--g-border)',
+                    background: isHdfcOutage ? 'var(--g-red-container)' : 'var(--g-surface-2)'
+                  }}
                 >
-                  <Smartphone size={14} color="#06b6d4" />
-                  <span>📱 1. UPI Timeout (₹499) ➔ ICICI Switch</span>
+                  <Smartphone size={14} color={isHdfcOutage ? 'var(--g-red)' : 'var(--g-blue)'} />
+                  <span>{isHdfcOutage ? '⚡ 1. HDFC Outage ➔ Preemptive Failover' : '1. UPI Timeout (₹499) ➔ ICICI Switch'}</span>
                 </button>
 
                 <button
                   onClick={() => triggerSimulation('upi_mandate')}
                   disabled={simulating !== null}
+                  className="g-button"
                   style={simBtnStyle}
                 >
-                  <Clock size={14} color="#f59e0b" />
-                  <span>📱 2. AutoPay Mandate (₹299) ➔ Payday Retry</span>
+                  <Clock size={14} color="var(--g-yellow)" />
+                  <span>2. AutoPay Mandate (₹299) ➔ Payday Retry</span>
                 </button>
 
                 <button
                   onClick={() => triggerSimulation('processor_timeout')}
                   disabled={simulating !== null}
+                  className="g-button"
                   style={simBtnStyle}
                 >
-                  <CreditCard size={14} color="#10b981" />
-                  <span>💳 3. RuPay Latency (₹2,490) ➔ Secondary Rail</span>
+                  <CreditCard size={14} color="var(--g-green)" />
+                  <span>3. RuPay Latency (₹2,490) ➔ Secondary Rail</span>
                 </button>
 
                 <button
                   onClick={() => triggerSimulation('stolen_card')}
                   disabled={simulating !== null}
+                  className="g-button"
                   style={simBtnStyle}
                 >
-                  <AlertTriangle size={14} color="#ef4444" />
-                  <span>🚨 4. Stolen Card (₹8,500) ➔ Zero-Loss Abandon</span>
+                  <AlertTriangle size={14} color="var(--g-red)" />
+                  <span>4. Stolen Card (₹8,500) ➔ Zero-Loss Abandon</span>
                 </button>
 
                 <button
                   onClick={() => triggerSimulation('retry_limit_exceeded')}
                   disabled={simulating !== null}
+                  className="g-button"
                   style={simBtnStyle}
                 >
                   <ShieldAlert size={14} color="#f43f5e" />
-                  <span>🚫 5. 16-Day Limit (₹1,999) ➔ Compliance Block</span>
+                  <span>5. 16-Day Limit (₹1,999) ➔ Compliance Block</span>
                 </button>
 
                 <button
                   onClick={() => triggerSimulation('high_value_hitl')}
                   disabled={simulating !== null}
-                  style={{ ...simBtnStyle, border: '1px solid rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.08)' }}
+                  className="g-button"
+                  style={{ ...simBtnStyle, border: '1px solid rgba(253, 214, 99, 0.4)', background: 'var(--g-yellow-container)' }}
                 >
-                  <UserCheck size={14} color="#f59e0b" />
-                  <span>👑 6. High-Value (₹14,999) ➔ HITL Review</span>
+                  <UserCheck size={14} color="var(--g-yellow)" />
+                  <span>6. High-Value (₹14,999) ➔ HITL Review</span>
                 </button>
               </div>
             </section>
 
             {/* Autonomous Audit Stream Feed */}
             <section>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Activity size={15} color="#10b981" />
-                  <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>
+                  <Activity size={16} color="var(--g-green)" />
+                  <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
                     AUTONOMOUS REVENUE AUDIT STREAM
                   </h2>
                   <span className="font-mono" style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    padding: '2px 6px',
-                    borderRadius: '10px',
-                    fontSize: '10px',
-                    color: 'var(--text-muted)'
+                    background: 'var(--g-surface-2)',
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    fontSize: '11px',
+                    color: 'var(--g-text-secondary)',
+                    border: '1px solid var(--g-border)'
                   }}>
                     {filteredRecords.length} records
                   </span>
                 </div>
 
-                {/* Filter Pills */}
-                <div style={{ display: 'flex', gap: '5px' }}>
+                {/* Google Material 3 Filter Chips */}
+                <div style={{ display: 'flex', gap: '6px' }}>
                   {['ALL', 'RECOVERED', 'BLOCKED', 'ABANDONED'].map((f) => (
                     <button
                       key={f}
                       onClick={() => setFilter(f)}
+                      className="g-button"
                       style={{
-                        background: filter === f ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.05)',
-                        color: filter === f ? '#000' : 'var(--text-muted)',
-                        border: '1px solid var(--border-subtle)',
-                        padding: '3px 8px',
-                        borderRadius: '4px',
-                        fontSize: '9px',
-                        fontWeight: 700,
+                        background: filter === f ? 'var(--g-blue)' : 'var(--g-surface-2)',
+                        color: filter === f ? '#041e49' : 'var(--g-text-secondary)',
+                        border: `1px solid ${filter === f ? 'transparent' : 'var(--g-border)'}`,
+                        padding: '4px 12px',
+                        borderRadius: '9999px',
+                        fontSize: '11px',
+                        fontWeight: 600,
                         cursor: 'pointer'
                       }}
                     >
@@ -887,23 +1403,23 @@ export default function App() {
               {/* Audit Cards Feed */}
               {filteredRecords.length === 0 ? (
                 <div style={{
-                  background: 'var(--bg-card)',
-                  border: '1px dashed var(--border-subtle)',
-                  borderRadius: '8px',
-                  padding: '36px 16px',
+                  background: 'var(--g-surface-1)',
+                  border: '1px dashed var(--g-border)',
+                  borderRadius: '16px',
+                  padding: '44px 20px',
                   textAlign: 'center',
-                  color: 'var(--text-muted)'
+                  color: 'var(--g-text-secondary)'
                 }}>
-                  <Radio size={28} color="var(--text-muted)" style={{ marginBottom: '8px', opacity: 0.5 }} />
-                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>
-                    Listening for ambient webhook event...
+                  <Radio size={32} color="var(--g-text-tertiary)" style={{ marginBottom: '10px', opacity: 0.6 }} />
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#f8fafc' }}>
+                    Listening for ambient webhook events...
                   </div>
-                  <p style={{ fontSize: '11px', marginTop: '4px' }}>
-                    Tap any simulation button above or switch to Mobile UPI App view below!
+                  <p style={{ fontSize: '12px', marginTop: '4px', color: 'var(--g-text-tertiary)' }}>
+                    Tap any simulation button above or toggle the HDFC Bank Outage sensor!
                   </p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   {filteredRecords.map((record) => (
                     <AuditCard 
                       key={record.id} 
@@ -922,16 +1438,16 @@ export default function App() {
         )}
       </main>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR (Like Native PhonePe / GPay) */}
+      {/* MOBILE BOTTOM NAVIGATION BAR (Google Material 3 Navigation Bar) */}
       <nav style={{
         position: 'fixed',
         bottom: 0,
         left: 0,
         right: 0,
-        height: '60px',
-        background: 'rgba(15, 23, 42, 0.98)',
-        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-        backdropFilter: 'blur(15px)',
+        height: '64px',
+        background: 'rgba(30, 31, 32, 0.95)',
+        borderTop: '1px solid var(--g-border)',
+        backdropFilter: 'blur(20px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-around',
@@ -939,66 +1455,77 @@ export default function App() {
       }}>
         <button
           onClick={() => setActiveTab('RADAR')}
+          className="g-button"
           style={{
             background: 'transparent',
             border: 'none',
-            color: activeTab === 'RADAR' ? '#10b981' : '#64748b',
+            color: activeTab === 'RADAR' ? 'var(--g-blue)' : 'var(--g-text-tertiary)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: '3px',
-            fontSize: '10px',
-            fontWeight: 700,
+            gap: '4px',
+            fontSize: '11px',
+            fontWeight: 600,
             cursor: 'pointer'
           }}
         >
-          <Activity size={18} />
+          <div style={{
+            background: activeTab === 'RADAR' ? 'var(--g-blue-container)' : 'transparent',
+            padding: '3px 14px',
+            borderRadius: '9999px'
+          }}>
+            <Activity size={18} />
+          </div>
           <span>RADAR FEED</span>
         </button>
 
         <button
           onClick={() => setActiveTab('UPI_APP')}
+          className="g-button"
           style={{
-            background: activeTab === 'UPI_APP' ? 'rgba(6, 182, 212, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-            border: `1px solid ${activeTab === 'UPI_APP' ? '#06b6d4' : 'rgba(255, 255, 255, 0.1)'}`,
-            color: activeTab === 'UPI_APP' ? '#06b6d4' : '#f8fafc',
+            background: activeTab === 'UPI_APP' ? 'var(--g-blue-container)' : 'var(--g-surface-2)',
+            border: `1px solid ${activeTab === 'UPI_APP' ? 'rgba(138, 180, 248, 0.4)' : 'var(--g-border)'}`,
+            color: activeTab === 'UPI_APP' ? 'var(--g-blue)' : '#f8fafc',
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
-            padding: '6px 14px',
-            borderRadius: '20px',
-            fontSize: '11px',
-            fontWeight: 800,
+            gap: '8px',
+            padding: '8px 18px',
+            borderRadius: '9999px',
+            fontSize: '12px',
+            fontWeight: 700,
             cursor: 'pointer',
-            boxShadow: activeTab === 'UPI_APP' ? '0 0 15px rgba(6, 182, 212, 0.3)' : 'none'
+            boxShadow: activeTab === 'UPI_APP' ? '0 0 20px rgba(138, 180, 248, 0.25)' : 'none'
           }}
         >
           <Smartphone size={16} />
-          <span>📱 MOBILE UPI APP</span>
+          <span>📱 GOOGLE PAY VIEW</span>
         </button>
 
         <a
           href={`${API_BASE}/api/audit/csv`}
           download="payrevive_audit_report.csv"
+          className="g-button"
           style={{
             background: 'transparent',
             border: 'none',
-            color: '#64748b',
+            color: 'var(--g-text-tertiary)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: '3px',
-            fontSize: '10px',
-            fontWeight: 700,
+            gap: '4px',
+            fontSize: '11px',
+            fontWeight: 600,
             textDecoration: 'none'
           }}
         >
-          <Download size={18} />
+          <div style={{ padding: '3px 14px' }}>
+            <Download size={18} />
+          </div>
           <span>AUDIT CSV</span>
         </a>
       </nav>
 
-      {/* Cross-Tool Dispatch Preview Modal (Simulated WhatsApp / Slack alert) */}
+      {/* Cross-Tool Dispatch Preview Modal (Google Material Dialog Style) */}
       {toolModal && (
         <div style={{
           position: 'fixed',
@@ -1006,46 +1533,46 @@ export default function App() {
           left: 0,
           width: '100vw',
           height: '100vh',
-          background: 'rgba(0,0,0,0.85)',
-          backdropFilter: 'blur(8px)',
+          background: 'rgba(0,0,0,0.8)',
+          backdropFilter: 'blur(10px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 1100
         }}>
           <div style={{
-            background: '#0f172a',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '12px',
-            padding: '20px',
-            maxWidth: '420px',
+            background: 'var(--g-surface-1)',
+            border: '1px solid var(--g-border-hover)',
+            borderRadius: '20px',
+            padding: '24px',
+            maxWidth: '440px',
             width: '90%',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+            boxShadow: '0 24px 60px rgba(0,0,0,0.8)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 700 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '15px', fontWeight: 700 }}>
                 {toolModal.type === 'WHATSAPP' ? (
                   <>
-                    <MessageSquare size={16} color="#25D366" />
+                    <MessageSquare size={18} color="#25D366" />
                     <span style={{ color: '#25D366' }}>Dispatched Customer WhatsApp Message</span>
                   </>
                 ) : (
                   <>
-                    <Share2 size={16} color="#E01E5A" />
+                    <Share2 size={18} color="#E01E5A" />
                     <span style={{ color: '#E01E5A' }}>Dispatched Merchant Slack Incident</span>
                   </>
                 )}
               </div>
-              <button onClick={() => setToolModal(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
-                <X size={16} />
+              <button onClick={() => setToolModal(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--g-text-tertiary)' }}>
+                <X size={18} />
               </button>
             </div>
 
             {toolModal.type === 'WHATSAPP' ? (
               <div style={{
                 background: '#0b141a',
-                borderRadius: '8px',
-                padding: '12px',
+                borderRadius: '12px',
+                padding: '14px',
                 border: '1px solid #202c33'
               }}>
                 <div style={{ fontSize: '11px', color: '#8696a0', marginBottom: '8px' }}>
@@ -1054,24 +1581,24 @@ export default function App() {
                 <div style={{
                   background: '#005c4b',
                   color: '#e9edef',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  fontSize: '12px',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  fontSize: '13px',
                   lineHeight: '1.4'
                 }}>
                   <div>👋 Hi Rahul, your payment of <b>₹{toolModal.record.transaction.amount}</b> to Swiggy timed out on your primary bank.</div>
-                  <div style={{ marginTop: '6px' }}>⚡ PayRevive auto-failover scheduled: Tap below to complete with 1-click UPI (No OTP needed):</div>
-                  <div style={{ marginTop: '8px', color: '#53bdeb', textDecoration: 'underline' }}>
+                  <div style={{ marginTop: '8px' }}>⚡ PayRevive auto-failover scheduled: Tap below to complete with 1-click UPI (No OTP needed):</div>
+                  <div style={{ marginTop: '10px', color: '#53bdeb', textDecoration: 'underline' }}>
                     https://payrevive.ai/pay/{toolModal.record.id}
                   </div>
-                  <div style={{ textAlign: 'right', fontSize: '9px', color: '#8696a0', marginTop: '4px' }}>Just now • Delivered ✓✓</div>
+                  <div style={{ textAlign: 'right', fontSize: '10px', color: '#8696a0', marginTop: '6px' }}>Just now • Delivered ✓✓</div>
                 </div>
               </div>
             ) : (
               <div style={{
                 background: '#1a1d21',
-                borderRadius: '8px',
-                padding: '12px',
+                borderRadius: '12px',
+                padding: '14px',
                 border: '1px solid #383f45'
               }}>
                 <div style={{ fontSize: '11px', color: '#9ba1a6', marginBottom: '8px' }}>
@@ -1079,12 +1606,12 @@ export default function App() {
                 </div>
                 <div style={{
                   background: '#222529',
-                  borderLeft: '4px solid #10b981',
-                  padding: '10px 12px',
-                  borderRadius: '4px',
+                  borderLeft: '4px solid var(--g-green)',
+                  padding: '12px 14px',
+                  borderRadius: '6px',
                   fontSize: '12px'
                 }}>
-                  <div style={{ fontWeight: 700, color: '#10b981' }}>⚡ REVENUE RECOVERED: ₹{toolModal.record.recovered_amount_usd}</div>
+                  <div style={{ fontWeight: 700, color: 'var(--g-green)' }}>⚡ REVENUE RECOVERED: ₹{toolModal.record.recovered_amount_usd}</div>
                   <div style={{ color: '#d1d2d3', marginTop: '4px', fontSize: '11px' }}>
                     • Cause: {toolModal.record.diagnosis.root_cause}<br />
                     • Action: {toolModal.record.optimization.chosen_action}<br />
@@ -1096,15 +1623,17 @@ export default function App() {
 
             <button
               onClick={() => setToolModal(null)}
+              className="g-button"
               style={{
                 width: '100%',
-                marginTop: '14px',
-                background: 'rgba(255,255,255,0.08)',
+                marginTop: '16px',
+                background: 'var(--g-surface-2)',
                 color: '#fff',
-                border: '1px solid rgba(255,255,255,0.1)',
-                padding: '8px',
-                borderRadius: '6px',
-                fontSize: '11px',
+                border: '1px solid var(--g-border)',
+                padding: '10px',
+                borderRadius: '9999px',
+                fontSize: '12px',
+                fontWeight: 600,
                 cursor: 'pointer'
               }}
             >
@@ -1123,43 +1652,44 @@ export default function App() {
           width: '100vw',
           height: '100vh',
           background: 'rgba(0,0,0,0.85)',
-          backdropFilter: 'blur(8px)',
+          backdropFilter: 'blur(10px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 1000
         }}>
           <div style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-active)',
-            borderRadius: '14px',
-            padding: '24px',
+            background: 'var(--g-surface-1)',
+            border: '1px solid var(--g-border-hover)',
+            borderRadius: '20px',
+            padding: '28px',
             maxWidth: '380px',
             width: '90%',
             textAlign: 'center',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+            boxShadow: '0 24px 60px rgba(0,0,0,0.8)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '15px' }}>
-                <Smartphone size={18} color="#06b6d4" />
-                <span>Open App on Any Mobile</span>
+                <Smartphone size={18} color="var(--g-blue)" />
+                <span>Open App on Mobile</span>
               </div>
-              <button onClick={() => setShowQRModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+              <button onClick={() => setShowQRModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--g-text-tertiary)' }}>
                 <X size={18} />
               </button>
             </div>
 
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+            <p style={{ fontSize: '12px', color: 'var(--g-text-secondary)', marginBottom: '18px' }}>
               Scan with your phone camera (on same Wi-Fi) to run the full UPI app on Android or iPhone!
             </p>
 
             {/* QR Code Image */}
             <div style={{
               background: '#ffffff',
-              padding: '12px',
-              borderRadius: '8px',
+              padding: '14px',
+              borderRadius: '16px',
               display: 'inline-block',
-              marginBottom: '16px'
+              marginBottom: '18px',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.3)'
             }}>
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(mobileNetworkUrl)}`}
@@ -1172,25 +1702,25 @@ export default function App() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              background: 'rgba(0,0,0,0.5)',
-              border: '1px solid var(--border-subtle)',
-              padding: '8px 12px',
-              borderRadius: '6px',
+              background: 'var(--g-surface-2)',
+              border: '1px solid var(--g-border)',
+              padding: '10px 14px',
+              borderRadius: '10px',
               fontSize: '11px',
               fontFamily: 'monospace'
             }}>
-              <span style={{ color: '#06b6d4', overflow: 'hidden', textOverflow: 'ellipsis' }}>{mobileNetworkUrl}</span>
+              <span style={{ color: 'var(--g-blue)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{mobileNetworkUrl}</span>
               <button
                 onClick={copyMobileUrl}
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: 'var(--text-main)',
+                  color: '#fff',
                   cursor: 'pointer',
                   marginLeft: '8px'
                 }}
               >
-                {copiedLink ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                {copiedLink ? <Check size={15} color="var(--g-green)" /> : <Copy size={15} />}
               </button>
             </div>
           </div>
@@ -1205,32 +1735,32 @@ export default function App() {
           left: 0,
           width: '100vw',
           height: '100vh',
-          background: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(6px)',
+          background: 'rgba(0,0,0,0.75)',
+          backdropFilter: 'blur(8px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 1000
         }}>
           <div style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-active)',
-            borderRadius: '10px',
-            padding: '20px',
+            background: 'var(--g-surface-1)',
+            border: '1px solid var(--g-border-hover)',
+            borderRadius: '18px',
+            padding: '24px',
             maxWidth: '480px',
             width: '90%',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.6)'
+            boxShadow: '0 24px 50px rgba(0,0,0,0.7)'
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <div style={{ fontSize: '15px', fontWeight: 700 }}>Custom Mobile/Card Webhook Inspector</div>
-              <button onClick={() => setShowCustomModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc' }}>Custom Webhook Payload Tester</div>
+              <button onClick={() => setShowCustomModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--g-text-tertiary)' }}>
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={submitCustomWebhook} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <form onSubmit={submitCustomWebhook} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Amount (₹ INR)</label>
+                <label style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>Transaction Amount (₹ INR)</label>
                 <input
                   type="number"
                   value={customForm.amount}
@@ -1241,7 +1771,7 @@ export default function App() {
               </div>
 
               <div>
-                <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Decline Code</label>
+                <label style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>Decline Reason Code</label>
                 <select
                   value={customForm.decline_code}
                   onChange={(e) => setCustomForm({ ...customForm, decline_code: e.target.value })}
@@ -1257,7 +1787,7 @@ export default function App() {
               </div>
 
               <div>
-                <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Issuing Bank / App</label>
+                <label style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>Issuing Bank / Payment App</label>
                 <input
                   type="text"
                   value={customForm.issuing_bank}
@@ -1268,19 +1798,20 @@ export default function App() {
 
               <button
                 type="submit"
+                className="g-button"
                 style={{
                   marginTop: '10px',
-                  background: 'var(--accent-primary)',
-                  color: '#000',
+                  background: 'var(--g-blue)',
+                  color: '#041e49',
                   border: 'none',
-                  padding: '10px',
-                  borderRadius: '6px',
+                  padding: '12px',
+                  borderRadius: '9999px',
                   fontWeight: 700,
                   fontSize: '13px',
                   cursor: 'pointer'
                 }}
               >
-                Trigger Failed Webhook
+                Dispatch Webhook Event
               </button>
             </form>
           </div>
@@ -1290,7 +1821,7 @@ export default function App() {
   );
 }
 
-// Subcomponent: 4-Part Audit Record Card with Cross-Tool Dispatch & Human-in-the-Loop Override
+// Subcomponent: 4-Part Audit Record Card (Google Material 3 Elevation Style)
 function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, onOverride, onOpenToolModal }) {
   const { transaction, diagnosis, optimization, compliance, outcome, recovered_amount_usd, processing_fee_saved_usd, latency_ms, dispatched_tools, hitl_status } = record;
 
@@ -1298,60 +1829,75 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
   const isBlocked = outcome === 'COMPLIANCE_BLOCKED';
   const isAbandoned = outcome === 'ABANDONED_FEES_SAVED';
   const isOverridden = hitl_status === 'OVERRIDDEN_BY_OPERATOR';
+  const isPreemptive = optimization.chosen_action === 'PROACTIVE_PREEMPTIVE_FAILOVER';
 
   return (
-    <div style={{
-      background: 'var(--bg-card)',
-      border: `1px solid ${isOverridden ? '#f59e0b' : isRecovered ? 'rgba(16, 185, 129, 0.35)' : isBlocked ? 'rgba(239, 68, 68, 0.4)' : 'var(--border-subtle)'}`,
-      borderRadius: '8px',
+    <div className="g-card" style={{
+      background: 'var(--g-surface-1)',
+      border: `1px solid ${isPreemptive ? 'rgba(56, 189, 248, 0.4)' : isOverridden ? 'rgba(253, 214, 99, 0.4)' : isRecovered ? 'rgba(129, 201, 149, 0.35)' : isBlocked ? 'rgba(242, 139, 130, 0.4)' : 'var(--g-border)'}`,
+      borderRadius: '16px',
       overflow: 'hidden',
-      boxShadow: isRecovered ? '0 4px 20px rgba(16, 185, 129, 0.05)' : 'none'
+      boxShadow: isPreemptive ? '0 6px 24px rgba(56, 189, 248, 0.1)' : isRecovered ? '0 6px 24px rgba(129, 201, 149, 0.06)' : 'none'
     }}>
       {/* Top Banner */}
       <div style={{
-        padding: '10px 14px',
-        background: 'rgba(255, 255, 255, 0.02)',
-        borderBottom: '1px solid var(--border-subtle)',
+        padding: '12px 18px',
+        background: isPreemptive ? 'rgba(56, 189, 248, 0.08)' : 'var(--g-surface-2)',
+        borderBottom: '1px solid var(--g-border)',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         flexWrap: 'wrap',
-        gap: '6px'
+        gap: '8px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <span className="font-mono" style={{
-            fontSize: '10px',
+            fontSize: '11px',
             fontWeight: 700,
-            background: 'rgba(16, 185, 129, 0.15)',
-            border: '1px solid #10b981',
-            color: '#10b981',
-            padding: '2px 6px',
-            borderRadius: '4px'
+            background: isPreemptive ? 'var(--g-blue-container)' : 'var(--g-green-container)',
+            border: `1px solid ${isPreemptive ? 'rgba(138, 180, 248, 0.3)' : 'rgba(129, 201, 149, 0.3)'}`,
+            color: isPreemptive ? 'var(--g-blue)' : 'var(--g-green)',
+            padding: '2px 8px',
+            borderRadius: '9999px'
           }}>
             #{record.id}
           </span>
-          <span className="font-mono" style={{ fontSize: '12px', color: '#f59e0b', fontWeight: 700 }}>
+          <span className="font-mono" style={{ fontSize: '13px', color: '#f8fafc', fontWeight: 800 }}>
             ₹{transaction.amount.toFixed(2)}
           </span>
-          <span className="font-mono" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>
             {transaction.issuing_bank}
           </span>
-          {isOverridden && (
-            <span className="font-mono" style={{
+          {isPreemptive && (
+            <span style={{
               fontSize: '10px',
-              color: '#f59e0b',
-              background: 'rgba(245, 158, 11, 0.15)',
-              border: '1px solid #f59e0b',
-              padding: '1px 6px',
-              borderRadius: '3px'
+              fontWeight: 700,
+              color: 'var(--g-blue)',
+              background: 'var(--g-blue-container)',
+              border: '1px solid rgba(138, 180, 248, 0.4)',
+              padding: '2px 8px',
+              borderRadius: '9999px'
             }}>
-              👤 OPERATOR OVERRIDE
+              🛡️ PREEMPTIVE SENSOR FAILOVER
+            </span>
+          )}
+          {isOverridden && (
+            <span style={{
+              fontSize: '10px',
+              fontWeight: 600,
+              color: 'var(--g-yellow)',
+              background: 'var(--g-yellow-container)',
+              border: '1px solid rgba(253, 214, 99, 0.3)',
+              padding: '2px 8px',
+              borderRadius: '9999px'
+            }}>
+              OPERATOR OVERRIDE
             </span>
           )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {/* Operator Override / HITL Action Trigger */}
+          {/* Operator Override Button */}
           {activeOverrideId === record.id ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <select
@@ -1360,23 +1906,24 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
                 }}
                 defaultValue=""
                 style={{
-                  background: '#0f172a',
-                  color: '#f59e0b',
-                  border: '1px solid #f59e0b',
-                  fontSize: '10px',
-                  borderRadius: '4px',
-                  padding: '2px 4px'
+                  background: 'var(--g-surface-3)',
+                  color: 'var(--g-yellow)',
+                  border: '1px solid var(--g-yellow)',
+                  fontSize: '11px',
+                  borderRadius: '6px',
+                  padding: '3px 6px',
+                  outline: 'none'
                 }}
               >
-                <option value="" disabled>Select Override Action...</option>
-                <option value="INSTANT_REROUTE_BACKUP_GATEWAY">⚡ Force Switch to ICICI Rail</option>
-                <option value="SCHEDULE_SMART_PAYDAY_RETRY">📅 Schedule for Payday (+1)</option>
-                <option value="ABANDON_NO_RETRY">🛡️ Abort & Save Fee</option>
-                <option value="AUTO_CARD_UPDATER">🔄 Token Card Updater</option>
+                <option value="" disabled>Select Action...</option>
+                <option value="INSTANT_REROUTE_BACKUP_GATEWAY">Force Switch to ICICI Rail</option>
+                <option value="SCHEDULE_SMART_PAYDAY_RETRY">Schedule for Payday (+1)</option>
+                <option value="ABANDON_NO_RETRY">Abort & Save Fee</option>
+                <option value="AUTO_CARD_UPDATER">Token Card Updater</option>
               </select>
               <button 
                 onClick={() => setActiveOverrideId(null)}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '11px' }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--g-text-tertiary)', cursor: 'pointer', fontSize: '12px' }}
               >
                 ✕
               </button>
@@ -1384,58 +1931,59 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
           ) : (
             <button
               onClick={() => setActiveOverrideId(record.id)}
+              className="g-button"
               title="Challenge HITL: Intervene and manually override AI decision"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
-                background: 'rgba(245, 158, 11, 0.1)',
-                border: '1px solid rgba(245, 158, 11, 0.4)',
-                color: '#f59e0b',
-                padding: '2px 7px',
-                borderRadius: '4px',
+                background: 'var(--g-surface-3)',
+                border: '1px solid var(--g-border)',
+                color: 'var(--g-yellow)',
+                padding: '4px 10px',
+                borderRadius: '9999px',
                 cursor: 'pointer',
-                fontSize: '10px',
-                fontWeight: 700
+                fontSize: '11px',
+                fontWeight: 600
               }}
             >
-              <Settings size={11} />
-              <span>OVERRIDE</span>
+              <Settings size={12} />
+              <span>Override</span>
             </button>
           )}
 
-          <span className="font-mono" style={{ fontSize: '10px', color: '#06b6d4' }}>
+          <span className="font-mono" style={{ fontSize: '11px', color: 'var(--g-blue)' }}>
             ⚡ {latency_ms}ms
           </span>
           <span className="font-mono" style={{
-            fontSize: '10px',
-            fontWeight: 800,
-            padding: '2px 8px',
-            borderRadius: '4px',
-            background: isRecovered ? 'rgba(16, 185, 129, 0.15)' : isBlocked ? 'rgba(239, 68, 68, 0.15)' : 'rgba(6, 182, 212, 0.15)',
-            color: isRecovered ? '#10b981' : isBlocked ? '#ef4444' : '#06b6d4',
-            border: `1px solid ${isRecovered ? '#10b981' : isBlocked ? '#ef4444' : '#06b6d4'}`
+            fontSize: '11px',
+            fontWeight: 700,
+            padding: '3px 10px',
+            borderRadius: '9999px',
+            background: isRecovered ? 'var(--g-green-container)' : isBlocked ? 'var(--g-red-container)' : 'var(--g-blue-container)',
+            color: isRecovered ? 'var(--g-green)' : isBlocked ? 'var(--g-red)' : 'var(--g-blue)',
+            border: `1px solid ${isRecovered ? 'rgba(129, 201, 149, 0.4)' : isBlocked ? 'rgba(242, 139, 130, 0.4)' : 'rgba(138, 180, 248, 0.4)'}`
           }}>
             {outcome}
           </span>
         </div>
       </div>
 
-      {/* The 4-Part System Grid */}
-      <div style={{ padding: '14px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+      {/* The 4-Part System Grid (Elevated Material 3 Cards) */}
+      <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '12px' }}>
         {/* Part 1: Failure Trigger & Telemetry */}
         <div style={stepBoxStyle}>
           <div style={stepHeaderStyle}>
-            <span className="font-mono" style={{ fontSize: '10px', color: '#f59e0b' }}>01 // TRIGGER</span>
-            <AlertCircle size={13} color="#f59e0b" />
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--g-yellow)' }}>01 // AMBIENT TRIGGER</span>
+            <AlertCircle size={14} color="var(--g-yellow)" />
           </div>
-          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc', marginTop: '4px' }}>
             {transaction.decline_code.toUpperCase()}
           </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '4px 0' }}>
+          <p style={{ fontSize: '11px', color: 'var(--g-text-secondary)', margin: '4px 0 8px 0', lineHeight: '1.4' }}>
             {transaction.decline_message}
           </p>
-          <div className="font-mono" style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: 'auto' }}>
+          <div className="font-mono" style={{ fontSize: '10px', color: 'var(--g-text-tertiary)', marginTop: 'auto' }}>
             Rail: {transaction.card_network} • Day {transaction.day_of_month}
           </div>
         </div>
@@ -1443,33 +1991,33 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
         {/* Part 2: XGBoost + SHAP Diagnosis */}
         <div style={stepBoxStyle}>
           <div style={stepHeaderStyle}>
-            <span className="font-mono" style={{ fontSize: '10px', color: '#06b6d4' }}>02 // SHAP DIAGNOSIS</span>
-            <Cpu size={13} color="#06b6d4" />
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--g-blue)' }}>02 // SHAP DIAGNOSIS</span>
+            <Cpu size={14} color="var(--g-blue)" />
           </div>
-          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-main)', marginTop: '2px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--g-text-secondary)', marginTop: '4px' }}>
             Root Cause:
           </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '2px 0 6px 0' }}>
+          <p style={{ fontSize: '11px', color: '#f8fafc', margin: '2px 0 6px 0', fontWeight: 500 }}>
             {diagnosis.root_cause}
           </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>P(Rec):</span>
-            <span className="font-mono" style={{ fontSize: '11px', fontWeight: 700, color: diagnosis.recovery_probability > 0.5 ? '#10b981' : '#ef4444' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--g-text-tertiary)' }}>P(Recovery):</span>
+            <span className="font-mono" style={{ fontSize: '12px', fontWeight: 800, color: diagnosis.recovery_probability > 0.5 ? 'var(--g-green)' : 'var(--g-red)' }}>
               {(diagnosis.recovery_probability * 100).toFixed(1)}%
             </span>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {diagnosis.shap_attributions.slice(0, 2).map((s, idx) => (
               <div key={idx} className="font-mono" style={{
-                fontSize: '9px',
-                padding: '2px 5px',
-                borderRadius: '3px',
-                background: s.shap_value > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                border: `1px solid ${s.shap_value > 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-                color: s.shap_value > 0 ? '#10b981' : '#ef4444'
+                fontSize: '10px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                background: s.shap_value > 0 ? 'var(--g-green-container)' : 'var(--g-red-container)',
+                border: `1px solid ${s.shap_value > 0 ? 'rgba(129, 201, 149, 0.25)' : 'rgba(242, 139, 130, 0.25)'}`,
+                color: s.shap_value > 0 ? 'var(--g-green)' : 'var(--g-red)'
               }}>
-                {s.shap_value > 0 ? `+${(s.shap_value * 100).toFixed(0)}%` : `${(s.shap_value * 100).toFixed(0)}%`} {s.feature}: {s.description.slice(0, 36)}...
+                {s.shap_value > 0 ? `+${(s.shap_value * 100).toFixed(0)}%` : `${(s.shap_value * 100).toFixed(0)}%`} {s.feature}: {s.description.slice(0, 32)}...
               </div>
             ))}
           </div>
@@ -1478,63 +2026,64 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
         {/* Part 3: Multi-Armed Bandit Action */}
         <div style={stepBoxStyle}>
           <div style={stepHeaderStyle}>
-            <span className="font-mono" style={{ fontSize: '10px', color: '#a855f7' }}>03 // BANDIT ACTION</span>
-            <TrendingUp size={13} color="#a855f7" />
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#c084fc' }}>03 // BANDIT ACTION</span>
+            <TrendingUp size={14} color="#c084fc" />
           </div>
-          <div style={{ marginTop: '2px' }}>
-            <span className="font-mono" style={{
-              fontSize: '10px',
+          <div style={{ marginTop: '4px' }}>
+            <span style={{
+              fontSize: '11px',
               fontWeight: 700,
-              background: 'rgba(168, 85, 247, 0.15)',
-              border: '1px solid #a855f7',
-              color: '#a855f7',
-              padding: '2px 6px',
-              borderRadius: '4px'
+              background: isPreemptive ? 'var(--g-blue-container)' : 'rgba(192, 132, 252, 0.14)',
+              border: `1px solid ${isPreemptive ? 'rgba(138, 180, 248, 0.4)' : 'rgba(192, 132, 252, 0.3)'}`,
+              color: isPreemptive ? 'var(--g-blue)' : '#c084fc',
+              padding: '2px 8px',
+              borderRadius: '9999px',
+              display: 'inline-block'
             }}>
               {optimization.chosen_action}
             </span>
           </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '6px 0' }}>
+          <p style={{ fontSize: '11px', color: 'var(--g-text-secondary)', margin: '6px 0', lineHeight: '1.4' }}>
             {optimization.action_reasoning}
           </p>
-          <div className="font-mono" style={{ fontSize: '10px', color: '#10b981', marginTop: 'auto' }}>
-            Expected ROI: +₹{optimization.expected_recovery_value_usd.toFixed(2)}
+          <div className="font-mono" style={{ fontSize: '11px', color: 'var(--g-green)', fontWeight: 700, marginTop: 'auto' }}>
+            Expected Net ROI: +₹{optimization.expected_recovery_value_usd.toFixed(2)}
           </div>
         </div>
 
         {/* Part 4: Compliance Guardrails & Outcome */}
         <div style={stepBoxStyle}>
           <div style={stepHeaderStyle}>
-            <span className="font-mono" style={{ fontSize: '10px', color: isRecovered ? '#10b981' : isBlocked ? '#ef4444' : '#06b6d4' }}>
-              04 // COMPLIANCE & OUTCOME
+            <span style={{ fontSize: '11px', fontWeight: 700, color: isRecovered ? 'var(--g-green)' : isBlocked ? 'var(--g-red)' : 'var(--g-blue)' }}>
+              04 // REGULATORY OUTCOME
             </span>
-            <ShieldCheck size={13} color={isRecovered ? '#10b981' : isBlocked ? '#ef4444' : '#06b6d4'} />
+            <ShieldCheck size={14} color={isRecovered ? 'var(--g-green)' : isBlocked ? 'var(--g-red)' : 'var(--g-blue)'} />
           </div>
 
-          <div style={{ fontSize: '11px', color: compliance.status === 'APPROVED' ? '#10b981' : '#ef4444', fontWeight: 600, margin: '2px 0' }}>
+          <div style={{ fontSize: '11px', color: compliance.status === 'APPROVED' ? 'var(--g-green)' : 'var(--g-red)', fontWeight: 600, margin: '4px 0 2px 0' }}>
             {compliance.status === 'APPROVED' ? '✓ Network Rules Cleared' : '✕ Action Blocked'}
           </div>
-          <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: '2px 0 6px 0' }}>
+          <p style={{ fontSize: '11px', color: 'var(--g-text-tertiary)', margin: '2px 0 6px 0', lineHeight: '1.3' }}>
             {compliance.reason}
           </p>
 
           <div style={{
             marginTop: 'auto',
-            padding: '6px',
-            background: 'rgba(0,0,0,0.4)',
-            borderRadius: '4px',
-            border: '1px solid rgba(255,255,255,0.06)'
+            padding: '8px 10px',
+            background: 'var(--g-surface-1)',
+            borderRadius: '8px',
+            border: '1px solid var(--g-border)'
           }}>
             {isRecovered ? (
-              <div className="font-mono" style={{ fontSize: '11px', fontWeight: 700, color: '#10b981' }}>
+              <div className="font-mono" style={{ fontSize: '12px', fontWeight: 800, color: 'var(--g-green)' }}>
                 🎉 Recovered: +₹{recovered_amount_usd.toFixed(2)}
               </div>
             ) : isAbandoned ? (
-              <div className="font-mono" style={{ fontSize: '11px', fontWeight: 700, color: '#06b6d4' }}>
+              <div className="font-mono" style={{ fontSize: '12px', fontWeight: 800, color: 'var(--g-blue)' }}>
                 🛡️ Preserved Fees: +₹{(processing_fee_saved_usd * 85).toFixed(0)}
               </div>
             ) : (
-              <div className="font-mono" style={{ fontSize: '11px', fontWeight: 700, color: '#ef4444' }}>
+              <div className="font-mono" style={{ fontSize: '12px', fontWeight: 800, color: 'var(--g-red)' }}>
                 🚫 Regulatory Block Triggered
               </div>
             )}
@@ -1545,17 +2094,17 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
       {/* Challenge Feature: Cross-Tool Action Dispatch */}
       {dispatched_tools && dispatched_tools.length > 0 && (
         <div style={{
-          padding: '8px 14px',
-          background: 'rgba(0, 0, 0, 0.45)',
-          borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+          padding: '10px 18px',
+          background: 'var(--g-surface-2)',
+          borderTop: '1px solid var(--g-border)',
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
           flexWrap: 'wrap',
           fontSize: '11px'
         }}>
-          <span className="font-mono" style={{ color: '#06b6d4', fontWeight: 700, fontSize: '10px' }}>
-            CROSS-TOOL DISPATCH:
+          <span style={{ color: 'var(--g-text-secondary)', fontWeight: 700, fontSize: '10px' }}>
+            DISPATCHED TOOLS:
           </span>
           {dispatched_tools.map((tool, idx) => {
             const isWhatsApp = tool.toLowerCase().includes('whatsapp');
@@ -1568,23 +2117,24 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
                   if (isWhatsApp) onOpenToolModal('WHATSAPP', record);
                   if (isSlack) onOpenToolModal('SLACK', record);
                 }}
-                className="font-mono" 
+                className="g-button"
                 style={{
-                  background: isWhatsApp ? 'rgba(37, 211, 102, 0.15)' : isSlack ? 'rgba(224, 30, 90, 0.15)' : 'rgba(6, 182, 212, 0.1)',
-                  border: `1px solid ${isWhatsApp ? '#25D366' : isSlack ? '#E01E5A' : 'rgba(6, 182, 212, 0.25)'}`,
-                  color: isWhatsApp ? '#25D366' : isSlack ? '#E01E5A' : '#38bdf8',
-                  padding: '2px 7px',
-                  borderRadius: '4px',
-                  fontSize: '10px',
+                  background: isWhatsApp ? 'rgba(37, 211, 102, 0.14)' : isSlack ? 'rgba(224, 30, 90, 0.14)' : 'var(--g-blue-container)',
+                  border: `1px solid ${isWhatsApp ? '#25D366' : isSlack ? '#E01E5A' : 'rgba(138, 180, 248, 0.3)'}`,
+                  color: isWhatsApp ? '#25D366' : isSlack ? '#E01E5A' : 'var(--g-blue)',
+                  padding: '3px 10px',
+                  borderRadius: '9999px',
+                  fontSize: '11px',
+                  fontWeight: 600,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px',
+                  gap: '5px',
                   cursor: (isWhatsApp || isSlack) ? 'pointer' : 'default'
                 }}
               >
-                {isWhatsApp ? <MessageSquare size={11} color="#25D366" /> :
-                 isSlack ? <Share2 size={11} color="#E01E5A" /> :
-                 <Zap size={10} color="#38bdf8" />}
+                {isWhatsApp ? <MessageSquare size={12} color="#25D366" /> :
+                 isSlack ? <Share2 size={12} color="#E01E5A" /> :
+                 <Zap size={11} color="var(--g-blue)" />}
                 <span>{tool} {(isWhatsApp || isSlack) && '🔍'}</span>
               </span>
             );
@@ -1595,34 +2145,34 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
   );
 }
 
-// Styling Constants
+// Styling Constants (Google Material 3 Theme)
 const metricCardStyle = {
-  background: 'var(--bg-card)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: '8px',
-  padding: '12px',
+  background: 'var(--g-surface-1)',
+  border: '1px solid var(--g-border)',
+  borderRadius: '16px',
+  padding: '18px 20px',
 };
 
 const simBtnStyle = {
   display: 'flex',
   alignItems: 'center',
-  gap: '6px',
-  background: 'rgba(255, 255, 255, 0.04)',
-  border: '1px solid var(--border-subtle)',
-  color: 'var(--text-main)',
-  padding: '8px 10px',
-  borderRadius: '6px',
+  gap: '8px',
+  background: 'var(--g-surface-2)',
+  border: '1px solid var(--g-border)',
+  color: '#f8fafc',
+  padding: '10px 14px',
+  borderRadius: '12px',
   cursor: 'pointer',
   fontSize: '11px',
   fontWeight: 600,
-  transition: 'all 0.15s ease'
+  textAlign: 'left'
 };
 
 const stepBoxStyle = {
-  background: 'rgba(0, 0, 0, 0.35)',
-  border: '1px solid rgba(255, 255, 255, 0.05)',
-  borderRadius: '6px',
-  padding: '10px',
+  background: 'var(--g-surface-2)',
+  border: '1px solid var(--g-border)',
+  borderRadius: '12px',
+  padding: '14px',
   display: 'flex',
   flexDirection: 'column'
 };
@@ -1636,12 +2186,12 @@ const stepHeaderStyle = {
 
 const inputStyle = {
   width: '100%',
-  padding: '8px 10px',
-  background: 'rgba(0,0,0,0.4)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: '6px',
+  padding: '10px 14px',
+  background: 'var(--g-surface-2)',
+  border: '1px solid var(--g-border)',
+  borderRadius: '10px',
   color: '#fff',
-  marginTop: '3px',
-  fontSize: '12px',
+  marginTop: '4px',
+  fontSize: '13px',
   outline: 'none'
 };

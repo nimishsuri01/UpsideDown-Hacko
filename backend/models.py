@@ -60,6 +60,17 @@ class ActionType(str, Enum):
     SCHEDULE_SMART_PAYDAY_RETRY = "SCHEDULE_SMART_PAYDAY_RETRY"
     AUTO_CARD_UPDATER = "AUTO_CARD_UPDATER"
     ABANDON_NO_RETRY = "ABANDON_NO_RETRY"
+    PROACTIVE_PREEMPTIVE_FAILOVER = "PROACTIVE_PREEMPTIVE_FAILOVER"
+
+class BankHealthStatus(BaseModel):
+    bank_id: str
+    name: str
+    status: str  # "HEALTHY", "DEGRADED", "CRITICAL_OUTAGE"
+    uptime_pct: float
+    latency_ms: int
+    failure_rate_pct: float
+    proactive_reroute_active: bool
+    last_incident: Optional[str] = None
 
 class ActionOptimization(BaseModel):
     chosen_action: ActionType
