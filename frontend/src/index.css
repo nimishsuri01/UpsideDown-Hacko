@@ -47,6 +47,15 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+/* Allow text selection only on input fields and specific selectable text */
+input, textarea, select, .selectable-text {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Google-style subtle radial backdrop aura */
