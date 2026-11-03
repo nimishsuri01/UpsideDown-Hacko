@@ -101,6 +101,18 @@ async def websocket_endpoint(websocket: WebSocket):
 async def health_check():
     return {"status": "ok", "app": "PayRevive", "version": "2.0.0"}
 
+@app.get("/api/network/ip")
+async def get_network_ip():
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        ip = "127.0.0.1"
+    return {"local_ip": ip, "mobile_url": f"http://{ip}:8000"}
+
 @app.get("/flowchart")
 async def get_flowchart():
     flowchart_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "PayRevive_Architecture_Flowchart.html")

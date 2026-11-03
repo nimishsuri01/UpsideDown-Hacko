@@ -139,7 +139,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [toolModal, setToolModal] = useState(null);
 
-  const mobileNetworkUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
+  const [mobileNetworkUrl, setMobileNetworkUrl] = useState('http://192.168.69.211:8000');
 
   // Custom Webhook Form
   const [customForm, setCustomForm] = useState({
@@ -211,6 +211,14 @@ export default function App() {
     fetch(`${API_BASE}/api/traffic/status`)
       .then((r) => r.json())
       .then((d) => setTrafficRunning(d.is_running || false))
+      .catch(() => {});
+
+    // Fetch dynamic LAN IP for mobile QR
+    fetch(`${API_BASE}/api/network/ip`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && d.mobile_url) setMobileNetworkUrl(d.mobile_url);
+      })
       .catch(() => {});
 
     return () => {
