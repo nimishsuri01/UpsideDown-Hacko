@@ -1,92 +1,95 @@
 # 💳 PayRevive // Autonomous AI Revenue Recovery Engine
-> Built for the **UPSIDE DOWN.EXE** Hackathon (Technical Student Society, GNDU Amritsar)  
-> **Problem Statement:** `PS-02 : Zero-Prompt AI` ("Kill the Chatbox. Build AI that responds to the world, not to a typed prompt.")
+> Built for the **UPSIDE DOWN.EXE** Hackathon (GNDU Technical Student Society)  
+> **Problem Statement:** `PS-02 : Zero-Prompt AI` ("Kill the Chatbox. Build ambient, autonomous AI that acts on events and state changes with zero typed prompts while keeping humans in control.")
 
 ---
 
-## 🎯 The Challenge & Why Chatboxes Fail in FinTech
-Most AI tools require a human to sit in front of a chatbox, type a prompt, and babysit conversations. But in high-volume payment processing (UPI, Razorpay, Paytm, Stripe, Visa, Mastercard):
-1. **Payments fail in milliseconds:** When an HDFC or ICICI server drops a UPI transaction or a recurring mandate fails, nobody has time to open ChatGPT or type a prompt.
-2. **Blind retries burn millions:** Retrying blindly burns interchange fees ($0.35/retry) and triggers Visa Rule 5.4.1.3 fines and merchant account bans.
-3. **True automation must be ambient:** Good automation notices failure events, understands context, acts across tools and devices, and recovers autonomously while keeping people in control.
+## 🚀 Live Demo & Presentation Links
+* 🌐 **Live FinTech Dashboard:** `http://localhost:8000`
+* 📊 **Interactive Architecture Flowchart:** `http://localhost:8000/flowchart`
+* 🖥️ **Presentation Pitch Deck (Web Slides):** `http://localhost:8000/slides`
+* 📁 **PowerPoint File:** `PayRevive_Hackathon_Pitch_Deck.pptx` (Saved on Desktop & Repository)
+
+---
+
+## 🎯 The Real-World Pain Point ($10B Involuntary Churn)
+India processes **450M+ daily UPI transactions** across Google Pay, Paytm, and PhonePe.
+1. **Payments Fail in Milliseconds:** During peak checkout hours (Swiggy, Zomato, petrol pumps), core banking sockets (HDFC, SBI, Paytm) spike above 2,400ms (`Decline U30: Core Banking Socket Timeout`).
+2. **Involuntary Cart Abandonment:** Customers don't want to cancel! But when the bank drops, customers abandon their cart or leave the store, causing merchants to lose millions in direct revenue.
+3. **Why Chatbots FAIL (The PS-02 Core):** Traditional AI pops up a support chatbox: *"Hi, please type your complaint."* **Nobody chats with an AI bot at a crowded petrol pump or food checkout!** The chatbox must be killed. Automation must be ambient, silent, and autonomous.
 
 ---
 
 ## 💡 The Solution: PayRevive Architecture
-PayRevive is an **event-driven, autonomous revenue recovery sentinel** with **ZERO chatbox interaction**.
+
+PayRevive is an **event-driven, autonomous revenue recovery sentinel** that plugs directly into Payment Orchestrators (Juspay / Razorpay / Cashfree) with **ZERO typed prompts**.
 
 ```
-[ WEBHOOK SENSOR ] ➔ [ XGBOOST + SHAP ] ➔ [ BANDIT OPTIMIZATION ] ➔ [ REGULATORY SHIELD ] ➔ [ CROSS-TOOL DISPATCH ]
-  UPI / Card Failure    Root Cause & P(Rec)     Multi-Armed Bandit       Visa/Mastercard Mandate   • ICICI Secondary Rail
-  Bank Server Drop      Feature Attribution     Expected Net ROI         Velocity & Fraud Check    • WhatsApp 1-Click Link
-  Mandate Drop          TreeSHAP Weights        Dynamic Rerouting        Anti-Retry Blacklist      • Slack FinOps Alert
+[ Customer Checkout ] ➔ [ Primary UPI Node (HDFC/Paytm) ] ──x [ Core Bank Timeout >2400ms ]
+                                                                     │ (15ms Webhook)
+                                                                     ▼
+[ ICICI Secondary Rail ] ◄──(12.4ms Preemptive Failover)── [ PayRevive Zero-Prompt Brain ]
+        │                                                            │
+        ▼                                                            ▼
+[ ✓ Succeeded ₹499 ]                                       [ WhatsApp 1-Click Link ]
+[ Zero User Churn  ]                                       [ Merchant Slack Alert  ]
 ```
 
 ---
 
-## 🌟 Key Features & Problem Statement Fulfillment
+## 🌟 Core Features & Technical Highlights
 
-### 1. Zero Chatbox / 100% Ambient Execution
-* Listens to payment webhooks from UPI switches (NPCI, PhonePe, GPay) and card gateways (RuPay, Visa, Mastercard).
+### 1. Zero Chatbox / 100% Event-Driven Autonomy
+* Subscribes to incoming payment webhooks (`/api/webhook/custom`) from UPI switches (NPCI, PhonePe, GPay) and card gateways (RuPay, Visa, Mastercard).
 * Zero user prompts required. Runs continuously in the background.
 
-### 2. Understands Context & State (XGBoost + TreeSHAP)
-* Analyzes decline telemetry (decline codes, issuer bank latency, day of month, tenure, retry count).
-* Computes precise recovery probabilities $P(recovery)$ and calculates local TreeSHAP attribution scores explaining *why* the AI made the decision.
+### 2. Ambient Bank & Gateway Health Sentinel
+* 24/7 background sensor continuously polling bank core nodes (NPCI, HDFC, Paytm, ICICI).
+* Detects latency spikes (>1200ms) and triggers **State Change Detection** to hot-reroute upcoming traffic to the ICICI Secondary Rail *before* customers fail.
 
-### 3. Acts Across Tools & Devices (Cross-Tool Dispatch)
-* **Tool 1 (Payment Rail):** Seamlessly reroutes failed traffic to secondary ICICI / Axis UPI rails in <50ms.
-* **Tool 2 (Customer Comm):** Automatically dispatches an OTP-less WhatsApp/SMS 1-click recovery link directly to the customer.
-* **Tool 3 (Merchant Ops):** Posts incident resolution alerts to merchant Slack (`#finops-radar-alerts`).
-* **Tool 4 (Mobile Phone):** Any smartphone can scan the QR code to run the **Mobile UPI App** with physical haptic vibration and audio feedback!
+### 3. Glass-Box Machine Learning (XGBoost + TreeSHAP)
+* Evaluates 8 transaction features in **12.4ms** to diagnose failure root causes.
+* Computes exact mathematical TreeSHAP feature weights (local explainability). Not a black-box AI!
 
-### 4. Recovers When Things Go Wrong (Multi-Armed Bandit Optimizer)
-* Evaluates expected net ROI across competing recovery strategies:
+### 4. Contextual Multi-Armed Bandit (Thompson Sampling)
+* Uses reinforcement learning (Beta Prior $\alpha=9, \beta=1$) to select the optimal recovery policy:
   * `INSTANT_REROUTE_BACKUP_GATEWAY`: Instant failover for bank timeouts.
-  * `SCHEDULE_SMART_PAYDAY_RETRY`: Captures payroll liquidity on the 1st or 5th of the month.
-  * `AUTO_CARD_UPDATER`: Updates tokenized credentials via Visa Account Updater (VAU/ABU).
-  * `ABANDON_NO_RETRY`: Aborts lost/stolen card retries to preserve fees.
+  * `SCHEDULE_SMART_PAYDAY_RETRY`: Captures payroll liquidity on salary days.
+  * `ABANDON_NO_RETRY`: Aborts stolen cards to preserve fees.
 
-### 5. "While Keeping People in Control" (Human-in-the-Loop Mode & Override)
-* **Autonomous vs Supervised Mode Toggle:** Switch between 100% Autonomous AI and Supervised Mode.
-* **1-Click Manual Override:** Operators can intervene and override any AI decision directly on the live feed.
-* **Emergency Kill Switch:** Instant administrative control.
+### 5. Regulatory Guardrails & Dedicated Blocked Reasons
+* Enforces **RBI Master Directions on Payment Aggregators** & **Visa/Mastercard Core Rule 5.1**.
+* **Smart Shield:** If a card is reported lost/stolen (`Decline 41`) or exceeds the 4-retry limit, AI aggressively **BLOCKS** the transaction, explicitly displaying the reason and saving the merchant ₹30–₹150 in interchange penalties!
 
-### 6. Ambient Gateway & Bank Telemetry Sensor
-* Monitors live bank health:
-  * `NPCI UPI Switch`: 99.8% Healthy
-  * `HDFC Core Banking`: Outage Detected (1850ms) ➔ Proactive auto-reroute to ICICI
-  * `ICICI Backup Rail`: Optimal (85ms)
+### 6. Big-3 Indian UPI Simulator
+* Interactive 1-click segmented switcher: **Google Pay (`manjot@okhdfcbank`)**, **Paytm UPI (`manjot@paytm`)**, and **PhonePe (`manjot@ybl`)**.
 
----
+### 7. Cross-Tool Dispatches
+* **Tool 1:** Hot-reroutes to ICICI Secondary Rail API.
+* **Tool 2:** Dispatches customer 1-click WhatsApp recovery link.
+* **Tool 3:** Posts incident alerts to merchant Slack (`#finops-radar-alerts`).
+* **Tool 4:** Real-world mobile PWA with physical haptic vibration (`navigator.vibrate`) and audio chimes.
 
-## 📱 Mobile Application (PWA)
-PayRevive is configured as a **Progressive Web App (PWA)**:
-* Scan the QR Code on any phone (Android or iPhone) on the same Wi-Fi.
-* Access the **Mobile UPI App Simulator (PhonePe/GPay View)** to experience a real UPI payment failure, physical phone vibration, and ambient AI recovery right in your hands!
-* Can be installed to the mobile home screen as a standalone app.
+### 8. Human-in-the-Loop (HITL) Mode
+* FinOps operators can toggle Supervised Mode and override any AI action in 1 click.
 
 ---
 
-## 🚀 Quickstart & How to Run
+## 🎤 60-Second Judge Pitch Script
 
-### Method 1: Double-Click Desktop Shortcut
-Double-click **`PayRevive`** or **`Launch_PayRevive.bat`** on your Desktop. It automatically starts the server and opens your browser at **`http://localhost:8000`**.
-
-### Method 2: Command Line
-```powershell
-python run.py
-```
-
-### Method 3: Mobile Phone
-1. Open dashboard on laptop.
-2. Click **`[OPEN ON PHONE (QR)]`**.
-3. Scan with your phone camera to run on mobile!
+> *"Sir, our project is **PayRevive — Autonomous AI Revenue Recovery Sentinel** for **PS-02 : Zero-Prompt AI**.*
+> 
+> *1. **We killed the chatbox:** When a payment fails on Swiggy or at a petrol pump, customers don't want to chat with a support bot. 
+> 2. **Ambient Telemetry:** Our background sensor monitors live bank pings. When we simulate an HDFC outage, the AI detects the state change and proactively reroutes traffic to the ICICI backup rail.
+> 3. **12ms Recovery:** In our mobile simulator, when a Google Pay or Paytm payment times out, PayRevive evaluates XGBoost and Thompson Sampling to hot-reroute the transaction in 12.4ms.
+> 4. **Smart Fraud Shield:** If a card is stolen, it aggressively blocks it under RBI rules, saving the merchant penalty fees.
+> 
+> *Everything runs with zero typed prompts, pure event-driven autonomy, and sub-50ms gateway SLA compliance!"*
 
 ---
 
-## 👥 Hackathon Team & Repository
+## 👥 Hackathon Team & Repositories
 * **Project:** PayRevive // Autonomous AI Revenue Recovery Engine
-* **Team Repository:** `https://github.com/nimishsuri01/UpsideDown-Hacko.git`
-* **Author Repository:** `https://github.com/Manjotpreet-Singh/Zero-Prompt-AI.git`
-* **Hackathon:** UPSIDE DOWN.EXE (Technical Student Society, GNDU Amritsar)
+* **Team Repositories:**
+  - `https://github.com/Manjotpreet-Singh/Zero-Prompt-AI.git`
+  - `https://github.com/nimishsuri01/UpsideDown-Hacko.git`
