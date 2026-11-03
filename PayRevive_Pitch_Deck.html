@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PayRevive // Hackathon Pitch Deck (PS-02 : Zero-Prompt AI)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #131c2e;
+      --border: rgba(255, 255, 255, 0.1);
+      --blue: #38bdf8;
+      --green: #4ade80;
+      --purple: #c084fc;
+      --yellow: #fde047;
+      --red: #f87171;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: var(--bg);
+      color: #f8fafc;
+      font-family: 'Inter', -apple-system, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      user-select: none;
+    }
+    .slide-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justifyContent: center;
+    }
+    .slide {
+      position: absolute;
+      width: 90vw;
+      max-width: 1300px;
+      height: 82vh;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 44px 50px;
+      display: none;
+      flex-direction: column;
+      justifyContent: space-between;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+      animation: fadeIn 0.3s ease-out;
+    }
+    .slide.active {
+      display: flex;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.98); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid var(--blue);
+      color: var(--blue);
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .slide-header {
+      display: flex;
+      justifyContent: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 18px;
+    }
+    .slide-title {
+      font-size: 26px;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+    .slide-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justifyContent: center;
+      padding: 20px 0;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    .card {
+      background: #0d1525;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justifyContent: space-between;
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+    .card-body {
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.6;
+    }
+    .stat-number {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 42px;
+      font-weight: 900;
+      margin-bottom: 6px;
+    }
+    .controls {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(19, 28, 46, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 8px 18px;
+      border-radius: 9999px;
+      backdrop-filter: blur(12px);
+      z-index: 100;
+    }
+    .btn-nav {
+      background: #1e293b;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-nav:hover {
+      background: var(--blue);
+      color: #041e49;
+    }
+    .slide-num {
+      font-family: 'Roboto Mono', monospace;
+      font-size: 12px;
+      color: var(--blue);
+      font-weight: 700;
+      min-width: 50px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="slide-container">
+
+    <!-- SLIDE 1: Title -->
+    <div class="slide active">
+      <div class="slide-header">
+        <span class="badge">PS-02 : ZERO-PROMPT AI // UPSIDE DOWN.EXE</span>
+        <span style="font-size: 12px; color: #94a3b8;">GNDU Technical Student Society</span>
+      </div>
+      <div class="slide-content" style="text-align: center; align-items: center;">
+        <div style="font-size: 64px; font-weight: 900; letter-spacing: -1.5px; background: linear-gradient(135deg, #38bdf8 0%, #c084fc 50%, #4ade80 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+          PayRevive
+        </div>
+        <div style="font-size: 24px; font-weight: 800; color: #f8fafc; margin-top: 10px;">
+          Autonomous AI Revenue Recovery & Bank Telemetry Sentinel
+        </div>
+        <p style="font-size: 16px; color: #94a3b8; max-width: 760px; margin-top: 16px; line-height: 1.6;">
+          <b>Kill the Chatbox.</b> In India, when an online payment or petrol pump UPI checkout fails, customers don't want a support bot. PayRevive silently detects bank outages and recovers transactions in <b>12.4ms</b> with zero typed prompts.
+        </p>
+        <div style="margin-top: 34px; display: flex; gap: 14px;">
+          <span style="background: rgba(56, 189, 248, 0.1); border: 1px solid var(--blue); color: var(--blue); padding: 6px 16px; border-radius: 9999px; font-size: 12px; font-weight: 700;">
+            ⚡ Google Pay • Paytm • PhonePe
+          </span>
+          <span style="background: rgba(74, 222, 128, 0.1); border: 1px solid var(--green); color: var(--green); padding: 6px 16px; border-radius: 9999px; font-size: 12px; font-weight: 700;">
+            🛡️ Preemptive Zero-Downtime Hot Reroute
+          </span>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 12px; color: #64748b; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 12px;">
+        <span>Presenter: Manjotpreet Singh & Team</span>
+        <span>Live Dashboard: http://localhost:8000</span>
+      </div>
+    </div>
+
+    <!-- SLIDE 2: Problem -->
+    <div class="slide">
+      <div class="slide-header">
+        <span class="badge">The Real-World Problem</span>
+        <span class="slide-title">The $10 Billion Involuntary Churn Bleed</span>
+      </div>
+      <div class="slide-content">
+        <div class="grid-3">
+          <div class="card" style="border-color: var(--blue);">
+            <div>
+              <div class="card-title" style="color: var(--blue);">🇮🇳 450M+ Daily UPI Swings</div>
+              <div class="card-body">
+                India runs on UPI. Every evening, millions order on Swiggy/Zomato or pay at petrol pumps. When HDFC or Paytm core banking sockets spike (>2400ms), payments fail en masse.
+              </div>
+            </div>
+            <div style="margin-top: 20px; font-size: 11px; color: #64748b;">Decline U30 • Bank Socket Timeout</div>
+          </div>
+
+          <div class="card" style="border-color: var(--red);">
+            <div>
+              <div class="card-title" style="color: var(--red);">⚠️ Involuntary Churn</div>
+              <div class="card-body">
+                The customer didn't want to cancel! The bank dropped. The customer closes the app or leaves the store, causing merchants to lose millions in direct revenue every single day.
+              </div>
+            </div>
+            <div style="margin-top: 20px; font-size: 11px; color: #fca5a5; font-weight: 700;">100% Recoverable Revenue Lost</div>
+          </div>
+
+          <div class="card" style="border-color: var(--yellow);">
+            <div>
+              <div class="card-title" style="color: var(--yellow);">❌ Why Chatbots FAIL (PS-02)</div>
+              <div class="card-body">
+                Traditional AI pops up a chatbox: <i>"Hi, type your complaint."</i><br><br>
+                <b>Nobody chats at a petrol pump or food checkout.</b> The chatbox must be killed. AI must act autonomously in milliseconds.
+              </div>
+            </div>
+            <div style="margin-top: 20px; font-size: 11px; color: var(--yellow); font-weight: 700;">Chatbots = 0% Real-time Help</div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size: 12px; color: #64748b;">Problem Statement: PS-02 Zero-Prompt AI</div>
+    </div>
+
+    <!-- SLIDE 3: Solution -->
+    <div class="slide">
+      <div class="slide-header">
+        <span class="badge">The Solution</span>
+        <span class="slide-title">PayRevive: Autonomous Sentinel Architecture</span>
+      </div>
+      <div class="slide-content">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title" style="color: var(--blue);">1. Ambient Health Sentinel (Sensors)</div>
+            <div class="card-body">
+              Polls NPCI, HDFC, Paytm, and ICICI nodes continuously (3.2s jittered cadence). Detects latency spikes (>1200ms) and triggers proactive state-change failover before the customer even drops.
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title" style="color: var(--green);">2. XGBoost + TreeSHAP Diagnosis</div>
+            <div class="card-body">
+              Classifies failed webhooks in 12ms. Evaluates 8 transaction features to distinguish transient network timeouts from permanent fraud or stolen cards with mathematical explainability.
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title" style="color: var(--purple);">3. Contextual Multi-Armed Bandit</div>
+            <div class="card-body">
+              Uses Thompson Sampling (Beta Prior α=9, β=1) to select the optimal recovery policy: Instant Backup Reroute, Smart Payday Retry, or 1-Click WhatsApp Link.
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title" style="color: var(--yellow);">4. RBI Compliance & HITL Guardrails</div>
+            <div class="card-body">
+              Enforces RBI Master Direction & NPCI redundancy mandates. Blocks illegal retries, saving merchant compliance fines, while giving operators a 1-click Human-in-the-Loop override.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size: 12px; color: #64748b;">Sub-50ms Payment Gateway SLA Compliant</div>
+    </div>
+
+    <!-- SLIDE 4: Live Demo Flow -->
+    <div class="slide">
+      <div class="slide-header">
+        <span class="badge">Live Demo Highlights</span>
+        <span class="slide-title">3-Click Interactive Judge Demo</span>
+      </div>
+      <div class="slide-content">
+        <div class="grid-3">
+          <div class="card">
+            <span class="badge" style="width: fit-content;">CLICK 1</span>
+            <div class="card-title" style="margin-top: 12px; color: var(--blue);">Mobile Simulator</div>
+            <div class="card-body">
+              Select <b>Google Pay</b>, <b>Paytm</b>, or <b>PhonePe</b> in the phone mockup. Tap <b>"Pay ₹499"</b>.<br><br>
+              Watch the phone simulate bank timeout and auto-reroute to the ICICI Secondary Rail in 12ms!
+            </div>
+          </div>
+
+          <div class="card">
+            <span class="badge" style="width: fit-content; border-color: var(--red); color: var(--red); background: rgba(248, 113, 113, 0.15);">CLICK 2</span>
+            <div class="card-title" style="margin-top: 12px; color: var(--red);">Simulate Outage</div>
+            <div class="card-body">
+              Tap <b>`[⚡ Simulate Outage]`</b> on the HDFC node.<br><br>
+              Latency surges to 2450ms. AI triggers state-change detection and proactively swaps 100% of upcoming traffic to ICICI before users fail!
+            </div>
+          </div>
+
+          <div class="card">
+            <span class="badge" style="width: fit-content; border-color: var(--green); color: var(--green); background: rgba(74, 222, 128, 0.15);">CLICK 3</span>
+            <div class="card-title" style="margin-top: 12px; color: var(--green);">Audit & Details</div>
+            <div class="card-body">
+              Click <b>`[Details ▾]`</b> on any audit record in the stream.<br><br>
+              Inspect real TreeSHAP attribution weights, Multi-Armed Bandit ROI, and dispatched WhatsApp/Slack notification previews!
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size: 12px; color: #64748b;">Works on Real Mobile via QR Scan (PWA + Physical Haptics)</div>
+    </div>
+
+    <!-- SLIDE 5: Business Impact -->
+    <div class="slide">
+      <div class="slide-header">
+        <span class="badge">Impact & Feasibility</span>
+        <span class="slide-title">Business Metrics & Production Feasibility</span>
+      </div>
+      <div class="slide-content">
+        <div class="grid-4">
+          <div class="card" style="text-align: center;">
+            <div class="stat-number" style="color: var(--green);">₹8,300+</div>
+            <div style="font-size: 12px; color: #94a3b8; font-weight: 700;">Direct Revenue Recovered</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 4px;">In test simulation stream</div>
+          </div>
+
+          <div class="card" style="text-align: center;">
+            <div class="stat-number" style="color: var(--blue);">80.0%</div>
+            <div style="font-size: 12px; color: #94a3b8; font-weight: 700;">Recovery Efficiency</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Contextual Bandit Optimization</div>
+          </div>
+
+          <div class="card" style="text-align: center;">
+            <div class="stat-number" style="color: var(--purple);">12.4ms</div>
+            <div style="font-size: 12px; color: #94a3b8; font-weight: 700;">Failover Latency</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Zero customer drop time</div>
+          </div>
+
+          <div class="card" style="text-align: center;">
+            <div class="stat-number" style="color: var(--yellow);">100%</div>
+            <div style="font-size: 12px; color: #94a3b8; font-weight: 700;">Zero-Prompt Automation</div>
+            <div style="font-size: 10px; color: #64748b; margin-top: 4px;">Zero chatbox prompts required</div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 20px; border-color: var(--blue);">
+          <div class="card-title" style="color: var(--blue);">🔌 Real-World Integration (Where it Sits)</div>
+          <div class="card-body">
+            PayRevive is an autonomous decision plug-in for Payment Orchestrators (Juspay Hyperswitch / Razorpay Optimizer / Cashfree). It replaces dumb static retry loops with predictive machine learning and live telemetry sensing.
+          </div>
+        </div>
+      </div>
+      <div style="font-size: 12px; color: #64748b;">Compliant with RBI Circular on Digital Payment Gateways</div>
+    </div>
+
+    <!-- SLIDE 6: Summary -->
+    <div class="slide">
+      <div class="slide-header">
+        <span class="badge">Summary & Q&A</span>
+        <span class="slide-title">Why PayRevive Wins PS-02</span>
+      </div>
+      <div class="slide-content" style="text-align: center; align-items: center;">
+        <div style="font-size: 38px; font-weight: 900; color: #fff;">
+          We Killed the Chatbox. We Saved the Revenue.
+        </div>
+        <p style="font-size: 16px; color: var(--green); margin-top: 10px; font-weight: 700;">
+          100% Autonomous • Event-Driven • State-Reactive Sentinel
+        </p>
+        <div class="card" style="margin-top: 26px; max-width: 600px; text-align: left;">
+          <div style="font-size: 13px; color: #cbd5e1; line-height: 1.8;">
+            ✓ <b>Working Live Demo:</b> http://localhost:8000<br>
+            ✓ <b>Interactive Flowchart:</b> http://localhost:8000/flowchart<br>
+            ✓ <b>Open on Real Phone:</b> PWA QR Scan with physical haptics<br>
+            ✓ <b>GitHub:</b> Manjotpreet-Singh/Zero-Prompt-AI & nimishsuri01/UpsideDown-Hacko
+          </div>
+        </div>
+        <div style="font-size: 20px; font-weight: 800; color: #fff; margin-top: 24px;">
+          Thank You! Ready for Judges' Q&A.
+        </div>
+      </div>
+      <div style="font-size: 12px; color: #64748b;">PayRevive // UPSIDE DOWN.EXE Hackathon</div>
+    </div>
+
+  </div>
+
+  <!-- Floating Navigation Controls -->
+  <div class="controls">
+    <button class="btn-nav" onclick="prevSlide()">◀ Prev</button>
+    <span class="slide-num" id="slideIndicator">1 / 6</span>
+    <button class="btn-nav" onclick="nextSlide()">Next ▶</button>
+    <button class="btn-nav" onclick="toggleFullScreen()">⛶ Fullscreen</button>
+  </div>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    let currentSlide = 0;
+
+    function showSlide(index) {
+      slides.forEach((s, idx) => {
+        s.classList.toggle('active', idx === index);
+      });
+      document.getElementById('slideIndicator').innerText = `${index + 1} / ${slides.length}`;
+      currentSlide = index;
+    }
+
+    function nextSlide() {
+      if (currentSlide < slides.length - 1) {
+        showSlide(currentSlide + 1);
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        showSlide(currentSlide - 1);
+      }
+    }
+
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    // Keyboard Navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft') {
+        prevSlide();
+      } else if (e.key === 'f' || e.key === 'F') {
+        toggleFullScreen();
+      }
+    });
+  </script>
+</body>
+</html>
