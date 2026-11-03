@@ -21,7 +21,8 @@ class AmbientTrafficGenerator:
         (PaymentDeclineCode.LOST_OR_STOLEN, "Decline 41: Lost or stolen card flag reported by cardholder", 0.04),
     ]
 
-    def __init__(self, engine):
+    def __init__(self, engine, interval_seconds: float = 3.5):
+        self.interval_seconds = interval_seconds
         self.engine = engine
         self.is_running = False
         self._task = None

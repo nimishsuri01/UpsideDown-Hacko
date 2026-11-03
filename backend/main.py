@@ -36,7 +36,7 @@ app.add_middleware(
 )
 
 engine = AutonomousRecoveryEngine()
-traffic_gen = AmbientTrafficGenerator(engine=engine, interval_seconds=3.0)
+traffic_gen = AmbientTrafficGenerator(engine=engine)
 ambient_telemetry_task = None
 
 async def ambient_telemetry_loop():
