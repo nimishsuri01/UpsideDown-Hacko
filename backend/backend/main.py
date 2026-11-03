@@ -101,6 +101,20 @@ async def websocket_endpoint(websocket: WebSocket):
 async def health_check():
     return {"status": "ok", "app": "PayRevive", "version": "2.0.0"}
 
+@app.get("/flowchart")
+async def get_flowchart():
+    flowchart_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "PayRevive_Architecture_Flowchart.html")
+    if os.path.exists(flowchart_path):
+        return FileResponse(flowchart_path)
+    raise HTTPException(status_code=404, detail="Flowchart not found")
+
+@app.get("/flowchart.svg")
+async def get_flowchart_svg():
+    svg_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "PayRevive_Architecture_Flowchart.svg")
+    if os.path.exists(svg_path):
+        return FileResponse(svg_path, media_type="image/svg+xml")
+    raise HTTPException(status_code=404, detail="SVG not found")
+
 @app.get("/api/metrics")
 async def get_metrics():
     return engine.metrics

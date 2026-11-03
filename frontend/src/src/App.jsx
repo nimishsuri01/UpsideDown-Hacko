@@ -515,6 +515,31 @@ export default function App() {
             <Download size={12} />
             <span>CSV</span>
           </a>
+
+          {/* Architecture Flowchart View */}
+          <a
+            href="/flowchart"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="g-button"
+            title="Open Interactive Architecture & Ingestion Flowchart"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'rgba(56, 189, 248, 0.15)',
+              border: '1px solid rgba(56, 189, 248, 0.4)',
+              color: 'var(--g-blue)',
+              padding: '6px 12px',
+              borderRadius: '9999px',
+              textDecoration: 'none',
+              fontWeight: 700,
+              fontSize: '11px'
+            }}
+          >
+            <Activity size={12} color="var(--g-blue)" />
+            <span>Flowchart</span>
+          </a>
         </div>
       </header>
 
