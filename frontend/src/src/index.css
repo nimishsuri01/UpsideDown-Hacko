@@ -1,0 +1,142 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Google Material You (M3) Dark Theme Colors */
+  --g-bg-base: #131314;
+  --g-surface-1: #1e1f20;
+  --g-surface-2: #282a2c;
+  --g-surface-3: #333538;
+  --g-surface-hover: #37393b;
+  
+  --g-border: rgba(255, 255, 255, 0.08);
+  --g-border-hover: rgba(255, 255, 255, 0.15);
+  --g-border-active: rgba(138, 180, 248, 0.35);
+
+  /* Google Brand Signature Colors */
+  --g-blue: #8ab4f8;
+  --g-blue-container: rgba(138, 180, 248, 0.12);
+  --g-green: #81c995;
+  --g-green-container: rgba(129, 201, 149, 0.12);
+  --g-yellow: #fdd663;
+  --g-yellow-container: rgba(253, 214, 99, 0.12);
+  --g-red: #f28b82;
+  --g-red-container: rgba(242, 139, 130, 0.12);
+
+  /* Text Hierarchy */
+  --g-text-primary: #f8fafc;
+  --g-text-secondary: #c4c7c5;
+  --g-text-tertiary: #8e918f;
+
+  /* Google Gemini Signature Gradient */
+  --g-gemini-gradient: linear-gradient(135deg, #4285f4 0%, #9b72cf 50%, #d96570 100%);
+  --g-gemini-glow: rgba(155, 114, 207, 0.25);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background-color: var(--g-bg-base);
+  color: var(--g-text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+/* Allow text selection only on input fields and specific selectable text */
+input, textarea, select, .selectable-text {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Google-style subtle radial backdrop aura */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1200px;
+  height: 600px;
+  background: radial-gradient(circle at 50% 0%, rgba(66, 133, 244, 0.08) 0%, rgba(155, 114, 207, 0.04) 40%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.font-mono {
+  font-family: 'Roboto Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Smooth Google Material Transitions */
+.g-card {
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s cubic-bezier(0.2, 0, 0, 1), border-color 0.2s ease;
+}
+
+.g-card:hover {
+  border-color: var(--g-border-hover);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+.g-button {
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.g-button:hover {
+  transform: translateY(-1px);
+}
+
+.g-button:active {
+  transform: scale(0.98);
+}
+
+/* Google Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--g-bg-base);
+}
+::-webkit-scrollbar-thumb {
+  background: #282a2c;
+  border-radius: 9999px;
+  border: 2px solid var(--g-bg-base);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3c4043;
+}
+
+/* Animations */
+@keyframes slideDownToast {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.pulse-indicator {
+  animation: pulseGlow 2s infinite ease-in-out;
+}
