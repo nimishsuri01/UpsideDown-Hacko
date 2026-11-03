@@ -15,7 +15,11 @@ start "" powershell -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-
 
 echo [*] Starting PayRevive server and dashboard...
 echo.
-python run.py
+
+set "PYTHON_EXE=C:\Users\manjo\AppData\Local\Programs\Python\Python312\python.exe"
+if not exist "%PYTHON_EXE%" set "PYTHON_EXE=python"
+
+"%PYTHON_EXE%" run.py
 
 if %errorlevel% neq 0 (
     echo.
