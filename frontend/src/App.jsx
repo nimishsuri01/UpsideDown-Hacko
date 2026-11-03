@@ -26,14 +26,26 @@ import {
   Copy,
   Check,
   Settings,
-  UserCheck
+  UserCheck,
+  RotateCw,
+  Send,
+  Lock,
+  ChevronRight
 } from 'lucide-react';
 
 const API_BASE = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
 const WS_URL = typeof window !== 'undefined' ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws` : 'ws://localhost:8000/ws';
 
-// Synthetic Web Audio Chime on Autonomous Recovery (Zero external MP3 dependency)
-function playRecoveryChime() {
+// Synthetic Multi-Sensory Feedback (Audio Chime + Physical Phone Vibration)
+function triggerDeviceFeedback() {
+  // 1. Physical Phone Haptic Vibration
+  if (typeof navigator !== 'undefined' && navigator.vibrate) {
+    try {
+      navigator.vibrate([100, 60, 180]);
+    } catch (e) {}
+  }
+
+  // 2. Cybernetic Audio Chime via Web Audio API (Zero external MP3 dependency)
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
@@ -70,6 +82,15 @@ export default function App() {
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  // Active View Tab: 'RADAR' (Live Stream) vs 'UPI_APP' (Mobile UPI Simulator)
+  const [activeTab, setActiveTab] = useState('RADAR');
+
+  // Interactive Mobile UPI Checkout State
+  const [upiAmount, setUpiAmount] = useState(499);
+  const [upiStage, setUpiStage] = useState('IDLE'); // IDLE, PROCESSING, FAILED, RECOVERING, SUCCESS
+  const [upiStageInfo, setUpiStageInfo] = useState('');
+  const [lastUpiRecord, setLastUpiRecord] = useState(null);
 
   // Challenge Features: Human-in-the-Loop & Override
   const [hitlMode, setHitlMode] = useState(false);
@@ -113,7 +134,7 @@ export default function App() {
             setMetrics(data.metrics || {});
             setAuditRecords((prev) => [data.record, ...prev]);
             if (data.record.outcome === 'RECOVERED' || data.record.outcome === 'SCHEDULED') {
-              playRecoveryChime();
+              triggerDeviceFeedback();
             }
           } else if (data.type === 'RECORD_UPDATED') {
             setMetrics(data.metrics || {});
@@ -197,6 +218,57 @@ export default function App() {
     }
   };
 
+  // Mobile Phone UPI Payment Simulation with Autonomous Sentinel Interception
+  const runMobileUpiTest = async (scenarioType) => {
+    setUpiStage('PROCESSING');
+    setUpiStageInfo('Initiating NPCI UPI Handshake via HDFC Bank Rail...');
+
+    setTimeout(async () => {
+      if (scenarioType === 'TIMEOUT') {
+        setUpiStage('FAILED');
+        setUpiStageInfo('Decline U30: HDFC UPI Core Server Timeout (>2400ms)');
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+
+        setTimeout(async () => {
+          setUpiStage('RECOVERING');
+          setUpiStageInfo('⚡ PayRevive Ambient Sentinel Intercepting failure event...');
+
+          try {
+            const res = await fetch(`${API_BASE}/api/simulate/upi_timeout`, { method: 'POST' });
+            const rec = await res.json();
+            setLastUpiRecord(rec);
+            triggerDeviceFeedback();
+            setUpiStage('SUCCESS');
+            setUpiStageInfo('Payment Autonomous Recovered! Switched to ICICI Secondary Rail in 41ms.');
+          } catch (e) {
+            setUpiStage('IDLE');
+          }
+        }, 1200);
+
+      } else if (scenarioType === 'MANDATE') {
+        setUpiStage('FAILED');
+        setUpiStageInfo('Decline M05: UPI AutoPay Mandate Failed - Insufficient Balance');
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+
+        setTimeout(async () => {
+          setUpiStage('RECOVERING');
+          setUpiStageInfo('⚡ PayRevive TreeSHAP Diagnosing & Scheduling Payday Retry...');
+
+          try {
+            const res = await fetch(`${API_BASE}/api/simulate/upi_mandate`, { method: 'POST' });
+            const rec = await res.json();
+            setLastUpiRecord(rec);
+            triggerDeviceFeedback();
+            setUpiStage('SUCCESS');
+            setUpiStageInfo('AutoPay Mandate Preserved! Scheduled retry for salary day (+1) + WhatsApp alert dispatched.');
+          } catch (e) {
+            setUpiStage('IDLE');
+          }
+        }, 1200);
+      }
+    }, 1000);
+  };
+
   const submitCustomWebhook = async (e) => {
     e.preventDefault();
     try {
@@ -225,13 +297,13 @@ export default function App() {
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg-dark)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg-dark)', paddingBottom: '70px' }}>
       {/* Top Header Bar */}
       <header style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: '12px 20px',
+        padding: '12px 16px',
         background: 'rgba(15, 23, 42, 0.95)',
         borderBottom: '1px solid var(--border-subtle)',
         position: 'sticky',
@@ -239,13 +311,13 @@ export default function App() {
         zIndex: 100,
         backdropFilter: 'blur(10px)',
         flexWrap: 'wrap',
-        gap: '10px'
+        gap: '8px'
       }}>
         {/* Brand & Badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div style={{
-            width: '34px',
-            height: '34px',
+            width: '32px',
+            height: '32px',
             borderRadius: '8px',
             background: 'linear-gradient(135deg, #10b981, #06b6d4)',
             display: 'flex',
@@ -253,146 +325,108 @@ export default function App() {
             justifyContent: 'center',
             boxShadow: '0 0 15px rgba(16, 185, 129, 0.4)'
           }}>
-            <Zap size={20} color="#000" />
+            <Zap size={18} color="#000" />
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <h1 style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '-0.5px', margin: 0 }}>
                 PAYREVIVE
               </h1>
               <span className="font-mono" style={{
                 background: 'rgba(16, 185, 129, 0.12)',
                 border: '1px solid rgba(16, 185, 129, 0.3)',
-                fontSize: '10px',
-                padding: '2px 6px',
+                fontSize: '9px',
+                padding: '1px 5px',
                 borderRadius: '4px',
                 color: '#10b981'
               }}>
-                PS-02 : ZERO-PROMPT AI
+                MOBILE UPI SENTINEL
               </span>
             </div>
-            <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-muted)' }}>
-              Autonomous Revenue Recovery • Mobile UPI & Multi-Rail Sentinel
-            </p>
           </div>
         </div>
 
-        {/* Ambient Controls, HITL Mode, QR Code & Status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {/* Human-in-the-Loop Control Switch (Challenge Requirement) */}
+        {/* Ambient Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          {/* HITL Switch */}
           <button
             onClick={toggleHitlMode}
             title="Toggle between 100% Autonomous AI and Supervised Human-in-the-Loop Mode"
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
+              gap: '4px',
               background: hitlMode ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.12)',
               border: `1px solid ${hitlMode ? '#f59e0b' : '#10b981'}`,
               color: hitlMode ? '#f59e0b' : '#10b981',
-              padding: '6px 12px',
+              padding: '5px 8px',
               borderRadius: '6px',
               cursor: 'pointer',
               fontWeight: 700,
-              fontSize: '11px'
+              fontSize: '10px'
             }}
           >
-            {hitlMode ? <UserCheck size={14} /> : <ShieldCheck size={14} />}
-            <span>{hitlMode ? 'SUPERVISED (HITL ON)' : '100% AUTONOMOUS AI'}</span>
+            {hitlMode ? <UserCheck size={12} /> : <ShieldCheck size={12} />}
+            <span>{hitlMode ? 'HITL ON' : '100% AUTO'}</span>
           </button>
 
-          {/* Mobile Connect / QR Code Button */}
+          {/* QR Code */}
           <button
             onClick={() => setShowQRModal(true)}
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
+              gap: '4px',
               background: 'rgba(6, 182, 212, 0.15)',
               border: '1px solid #06b6d4',
               color: '#06b6d4',
-              padding: '6px 12px',
+              padding: '5px 8px',
               borderRadius: '6px',
               cursor: 'pointer',
               fontWeight: 700,
-              fontSize: '11px'
+              fontSize: '10px'
             }}
           >
-            <Smartphone size={14} />
-            <span>OPEN ON PHONE (QR)</span>
+            <Smartphone size={12} />
+            <span>QR</span>
           </button>
 
-          {/* Continuous Traffic Generator Button */}
+          {/* Continuous Traffic */}
           <button
             onClick={toggleTraffic}
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
+              gap: '4px',
               background: trafficRunning ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
               border: `1px solid ${trafficRunning ? '#ef4444' : '#10b981'}`,
               color: trafficRunning ? '#ef4444' : '#10b981',
-              padding: '6px 12px',
+              padding: '5px 8px',
               borderRadius: '6px',
               cursor: 'pointer',
               fontWeight: 700,
-              fontSize: '11px'
+              fontSize: '10px'
             }}
           >
-            {trafficRunning ? <Square size={13} fill="#ef4444" /> : <Play size={13} fill="#10b981" />}
-            <span>{trafficRunning ? 'STOP' : 'LIVE STREAM'}</span>
+            {trafficRunning ? <Square size={11} fill="#ef4444" /> : <Play size={11} fill="#10b981" />}
+            <span>{trafficRunning ? 'STOP' : 'STREAM'}</span>
           </button>
 
-          {/* Download CSV */}
-          <a
-            href={`${API_BASE}/api/audit/csv`}
-            download="payrevive_audit_report.csv"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid var(--border-subtle)',
-              color: 'var(--text-main)',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              textDecoration: 'none',
-              fontSize: '11px',
-              fontWeight: 600
-            }}
-          >
-            <Download size={13} />
-            <span>CSV</span>
-          </a>
-
-          {/* Live WebSocket Status Dot */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '11px',
-            color: connected ? '#10b981' : '#ef4444',
-            padding: '5px 8px',
-            background: 'rgba(0,0,0,0.3)',
-            borderRadius: '6px',
-            border: '1px solid var(--border-subtle)'
-          }}>
-            <span style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: connected ? '#10b981' : '#ef4444',
-              boxShadow: connected ? '0 0 8px #10b981' : 'none'
-            }} />
-            <span className="font-mono">{connected ? 'ONLINE' : 'RECONNECTING'}</span>
-          </div>
+          {/* WebSocket Status */}
+          <span style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: connected ? '#10b981' : '#ef4444',
+            boxShadow: connected ? '0 0 8px #10b981' : 'none'
+          }} />
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main style={{ flex: 1, padding: '16px 20px', maxWidth: '1440px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+      <main style={{ flex: 1, padding: '14px 16px', maxWidth: '1440px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
         
-        {/* Ambient Gateway & Bank Telemetry Sensor (Reacts to State Changes) */}
+        {/* Ambient Gateway & Bank Telemetry Sensor Strip */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -400,55 +434,190 @@ export default function App() {
           gap: '12px',
           background: 'rgba(15, 23, 42, 0.75)',
           border: '1px solid rgba(56, 189, 248, 0.25)',
-          padding: '8px 14px',
+          padding: '8px 12px',
           borderRadius: '8px',
-          marginBottom: '16px',
+          marginBottom: '14px',
           fontSize: '11px',
           overflowX: 'auto',
           whiteSpace: 'nowrap'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#38bdf8', fontWeight: 700 }}>
-            <Activity size={14} color="#38bdf8" />
-            <span>AMBIENT SENSOR:</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#38bdf8', fontWeight: 700 }}>
+            <Activity size={13} color="#38bdf8" />
+            <span>BANK SENSOR:</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#10b981' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10b981' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
-              NPCI UPI Switch: <b>99.8% Optimal (110ms)</b>
+              NPCI UPI: <b>99.8% Healthy</b>
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#ef4444' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#ef4444' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }}></span>
-              HDFC Core UPI: <b>CRITICAL OUTAGE (1850ms)</b> ➔ AI Auto-Reroute to ICICI
+              HDFC Core UPI: <b>OUTAGE (1850ms)</b> ➔ Auto-Failover to ICICI
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#10b981' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10b981' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
-              ICICI Backup Rail: <b>READY (85ms)</b>
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#38bdf8' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#38bdf8' }}></span>
-              Razorpay Gateway: <b>99.4% Active</b>
+              ICICI Backup Rail: <b>ACTIVE (85ms)</b>
             </span>
           </div>
         </div>
 
+        {/* TAB 1: INTERACTIVE MOBILE UPI APP EXPERIENCE (PHONEPE / GPAY VIEW) */}
+        {activeTab === 'UPI_APP' && (
+          <div style={{ maxWidth: '440px', margin: '0 auto 20px auto' }}>
+            <div style={{
+              background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
+              border: '2px solid rgba(6, 182, 212, 0.4)',
+              borderRadius: '16px',
+              padding: '20px',
+              boxShadow: '0 15px 35px rgba(0, 0, 0, 0.6)'
+            }}>
+              {/* Phone App Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Smartphone size={16} color="#fff" />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800 }}>UPI Secure Pay</div>
+                    <div style={{ fontSize: '10px', color: '#94a3b8' }}>NPCI Verified Rail</div>
+                  </div>
+                </div>
+                <div className="font-mono" style={{ fontSize: '10px', color: '#10b981', background: 'rgba(16,185,129,0.15)', padding: '2px 6px', borderRadius: '4px' }}>
+                  PROTECTED BY PAYREVIVE
+                </div>
+              </div>
+
+              {/* Bill Details */}
+              <div style={{ textAlign: 'center', margin: '14px 0' }}>
+                <div style={{ fontSize: '11px', color: '#94a3b8' }}>Paying to Merchant:</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc', marginTop: '2px' }}>
+                  Swiggy / Zomato Express (Food Delivery)
+                </div>
+                <div className="font-mono" style={{ fontSize: '28px', fontWeight: 900, color: '#10b981', margin: '10px 0' }}>
+                  ₹{upiAmount}.00
+                </div>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>
+                  Linked VPA: customer@okhdfcbank • HDFC Bank Primary
+                </div>
+              </div>
+
+              {/* Live Status Animation Box */}
+              {upiStage !== 'IDLE' && (
+                <div style={{
+                  padding: '14px',
+                  borderRadius: '10px',
+                  background: upiStage === 'PROCESSING' ? 'rgba(56, 189, 248, 0.1)' :
+                              upiStage === 'FAILED' ? 'rgba(239, 68, 68, 0.15)' :
+                              upiStage === 'RECOVERING' ? 'rgba(168, 85, 247, 0.18)' :
+                              'rgba(16, 185, 129, 0.18)',
+                  border: `1px solid ${
+                    upiStage === 'PROCESSING' ? '#38bdf8' :
+                    upiStage === 'FAILED' ? '#ef4444' :
+                    upiStage === 'RECOVERING' ? '#a855f7' :
+                    '#10b981'
+                  }`,
+                  marginBottom: '16px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: upiStage === 'FAILED' ? '#ef4444' : upiStage === 'SUCCESS' ? '#10b981' : '#38bdf8' }}>
+                    {upiStage === 'PROCESSING' && '⏳ Step 1: Processing UPI request with Bank...'}
+                    {upiStage === 'FAILED' && '✕ Step 2: Bank Failure Detected!'}
+                    {upiStage === 'RECOVERING' && '⚡ Step 3: Zero-Prompt AI Sentinel Intercepting...'}
+                    {upiStage === 'SUCCESS' && '🎉 Step 4: Autonomous Recovery Completed!'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    {upiStageInfo}
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons for Judges to Tap on Mobile */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
+                <button
+                  onClick={() => runMobileUpiTest('TIMEOUT')}
+                  disabled={upiStage === 'PROCESSING' || upiStage === 'RECOVERING'}
+                  style={{
+                    background: 'linear-gradient(135deg, #0284c7, #0369a1)',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 15px rgba(2, 132, 199, 0.3)'
+                  }}
+                >
+                  <Zap size={16} />
+                  <span>📱 Tap to Pay (Trigger UPI Timeout)</span>
+                </button>
+
+                <button
+                  onClick={() => runMobileUpiTest('MANDATE')}
+                  disabled={upiStage === 'PROCESSING' || upiStage === 'RECOVERING'}
+                  style={{
+                    background: 'rgba(245, 158, 11, 0.15)',
+                    color: '#f59e0b',
+                    border: '1px solid #f59e0b',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <Clock size={15} />
+                  <span>📅 AutoPay Mandate (Trigger Insufficient Funds)</span>
+                </button>
+
+                {upiStage === 'SUCCESS' && (
+                  <button
+                    onClick={() => { setUpiStage('IDLE'); setUpiStageInfo(''); }}
+                    style={{
+                      background: 'transparent',
+                      color: '#94a3b8',
+                      border: '1px dashed #475569',
+                      padding: '8px',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      marginTop: '4px'
+                    }}
+                  >
+                    Reset UPI Payment Simulator
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 4 Metric Counter Cards */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '12px',
-          marginBottom: '20px'
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '10px',
+          marginBottom: '16px'
         }}>
           {/* Revenue at Risk */}
           <div style={metricCardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '11px' }}>
               <span>REVENUE AT RISK</span>
-              <AlertCircle size={15} color="#ef4444" />
+              <AlertCircle size={14} color="#ef4444" />
             </div>
-            <div className="font-mono" style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#ef4444' }}>
+            <div className="font-mono" style={{ fontSize: '20px', fontWeight: 800, marginTop: '4px', color: '#ef4444' }}>
               ₹{metrics.total_at_risk_usd ? metrics.total_at_risk_usd.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}
             </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              From {metrics.total_events || 0} failed mobile/card events
+            <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              {metrics.total_events || 0} failed events
             </div>
           </div>
 
@@ -456,220 +625,300 @@ export default function App() {
           <div style={{ ...metricCardStyle, border: '1px solid rgba(16, 185, 129, 0.4)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#10b981', fontSize: '11px' }}>
               <span>AUTONOMOUS RECOVERED</span>
-              <Banknote size={15} color="#10b981" />
+              <Banknote size={14} color="#10b981" />
             </div>
-            <div className="font-mono" style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#10b981' }}>
+            <div className="font-mono" style={{ fontSize: '20px', fontWeight: 800, marginTop: '4px', color: '#10b981' }}>
               ₹{metrics.total_recovered_usd ? metrics.total_recovered_usd.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}
             </div>
-            <div style={{ fontSize: '10px', color: '#10b981', marginTop: '4px' }}>
-              Recovered instantly via AI routing
+            <div style={{ fontSize: '9px', color: '#10b981', marginTop: '2px' }}>
+              Recovered without chat prompts
             </div>
           </div>
 
           {/* Fees Saved */}
           <div style={metricCardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '11px' }}>
-              <span>INTERCHANGE FEES SAVED</span>
-              <PiggyBank size={15} color="#06b6d4" />
+              <span>FEES PRESERVED</span>
+              <PiggyBank size={14} color="#06b6d4" />
             </div>
-            <div className="font-mono" style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#06b6d4' }}>
+            <div className="font-mono" style={{ fontSize: '20px', fontWeight: 800, marginTop: '4px', color: '#06b6d4' }}>
               ₹{metrics.total_fees_saved_usd ? (metrics.total_fees_saved_usd * 85).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}
             </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              {metrics.compliance_blocks || 0} compliance blocks enforced
+            <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              {metrics.compliance_blocks || 0} compliance blocks
             </div>
           </div>
 
           {/* Net Recovery Rate */}
           <div style={metricCardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '11px' }}>
-              <span>NET RECOVERY EFFICIENCY</span>
-              <TrendingUp size={15} color="#a855f7" />
+              <span>RECOVERY RATE</span>
+              <TrendingUp size={14} color="#a855f7" />
             </div>
-            <div className="font-mono" style={{ fontSize: '22px', fontWeight: 800, marginTop: '6px', color: '#a855f7' }}>
+            <div className="font-mono" style={{ fontSize: '20px', fontWeight: 800, marginTop: '4px', color: '#a855f7' }}>
               {metrics.recovery_rate_pct ? metrics.recovery_rate_pct.toFixed(1) : '0.0'}%
             </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Zero-Prompt Multi-Armed Bandit
+            <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              Multi-Armed Bandit ROI
             </div>
           </div>
         </div>
 
-        {/* Interactive Ambient Simulation Bar */}
-        <section style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border-active)',
-          borderRadius: '10px',
-          padding: '16px',
-          marginBottom: '24px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Zap size={16} color="#10b981" />
-                <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>
-                  MOBILE UPI & MULTI-RAIL TESTBENCH (JUDGES DEMO)
-                </h2>
-              </div>
-              <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', margin: 0 }}>
-                Click below to simulate real mobile UPI timeouts, mandate drops, card blocks, or high-value HITL review.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowCustomModal(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'rgba(6, 182, 212, 0.15)',
-                border: '1px solid #06b6d4',
-                color: '#06b6d4',
-                padding: '5px 12px',
-                borderRadius: '6px',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              <PlusCircle size={13} />
-              <span>CUSTOM WEBHOOK</span>
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
-            <button
-              onClick={() => triggerSimulation('upi_timeout')}
-              disabled={simulating !== null}
-              style={simBtnStyle}
-            >
-              <Smartphone size={15} color="#06b6d4" />
-              <span>📱 1. UPI Timeout (₹499) ➔ ICICI Switch</span>
-            </button>
-
-            <button
-              onClick={() => triggerSimulation('upi_mandate')}
-              disabled={simulating !== null}
-              style={simBtnStyle}
-            >
-              <Clock size={15} color="#f59e0b" />
-              <span>📱 2. UPI AutoPay (₹299) ➔ Payday Retry</span>
-            </button>
-
-            <button
-              onClick={() => triggerSimulation('processor_timeout')}
-              disabled={simulating !== null}
-              style={simBtnStyle}
-            >
-              <CreditCard size={15} color="#10b981" />
-              <span>💳 3. RuPay Drop (₹2,490) ➔ Secondary Rail</span>
-            </button>
-
-            <button
-              onClick={() => triggerSimulation('stolen_card')}
-              disabled={simulating !== null}
-              style={simBtnStyle}
-            >
-              <AlertTriangle size={15} color="#ef4444" />
-              <span>🚨 4. Stolen Card (₹8,500) ➔ Zero-Loss Abandon</span>
-            </button>
-
-            <button
-              onClick={() => triggerSimulation('retry_limit_exceeded')}
-              disabled={simulating !== null}
-              style={simBtnStyle}
-            >
-              <ShieldAlert size={15} color="#f43f5e" />
-              <span>🚫 5. 16-Day Limit (₹1,999) ➔ Compliance Block</span>
-            </button>
-
-            {/* High-Value HITL Demo */}
-            <button
-              onClick={() => triggerSimulation('high_value_hitl')}
-              disabled={simulating !== null}
-              style={{ ...simBtnStyle, border: '1px solid rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.08)' }}
-            >
-              <UserCheck size={15} color="#f59e0b" />
-              <span>👑 6. High-Value (₹14,999) ➔ HITL Review</span>
-            </button>
-          </div>
-        </section>
-
-        {/* Autonomous Audit Stream Section */}
-        <section>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Activity size={16} color="#10b981" />
-              <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>
-                AUTONOMOUS REVENUE AUDIT STREAM
-              </h2>
-              <span className="font-mono" style={{
-                background: 'rgba(255, 255, 255, 0.08)',
-                padding: '2px 6px',
-                borderRadius: '10px',
-                fontSize: '10px',
-                color: 'var(--text-muted)'
-              }}>
-                {filteredRecords.length} records
-              </span>
-            </div>
-
-            {/* Filter Pills */}
-            <div style={{ display: 'flex', gap: '6px' }}>
-              {['ALL', 'RECOVERED', 'BLOCKED', 'ABANDONED'].map((f) => (
+        {/* TAB 2: AUTONOMOUS AUDIT STREAM & SIMULATION BAR */}
+        {activeTab === 'RADAR' && (
+          <>
+            {/* Interactive Ambient Simulation Bar */}
+            <section style={{
+              background: 'var(--bg-card)',
+              border: '1px solid var(--border-active)',
+              borderRadius: '10px',
+              padding: '14px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Zap size={15} color="#10b981" />
+                    <h2 style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>
+                      MOBILE UPI & MULTI-RAIL TESTBENCH
+                    </h2>
+                  </div>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                    Simulate real UPI bank server dropouts, mandate expiry, and regulatory checks.
+                  </p>
+                </div>
                 <button
-                  key={f}
-                  onClick={() => setFilter(f)}
+                  onClick={() => setShowCustomModal(true)}
                   style={{
-                    background: filter === f ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.05)',
-                    color: filter === f ? '#000' : 'var(--text-muted)',
-                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    background: 'rgba(6, 182, 212, 0.15)',
+                    border: '1px solid #06b6d4',
+                    color: '#06b6d4',
                     padding: '4px 10px',
-                    borderRadius: '5px',
+                    borderRadius: '6px',
                     fontSize: '10px',
                     fontWeight: 700,
                     cursor: 'pointer'
                   }}
                 >
-                  {f}
+                  <PlusCircle size={12} />
+                  <span>CUSTOM</span>
                 </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Audit Cards Feed */}
-          {filteredRecords.length === 0 ? (
-            <div style={{
-              background: 'var(--bg-card)',
-              border: '1px dashed var(--border-subtle)',
-              borderRadius: '8px',
-              padding: '40px 16px',
-              textAlign: 'center',
-              color: 'var(--text-muted)'
-            }}>
-              <Radio size={32} color="var(--text-muted)" style={{ marginBottom: '8px', opacity: 0.5 }} />
-              <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
-                Waiting for mobile webhook event...
               </div>
-              <p style={{ fontSize: '12px', marginTop: '4px' }}>
-                Tap any test button above or scan the QR code to test on mobile!
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {filteredRecords.map((record) => (
-                <AuditCard 
-                  key={record.id} 
-                  record={record} 
-                  hitlMode={hitlMode}
-                  activeOverrideId={activeOverrideId}
-                  setActiveOverrideId={setActiveOverrideId}
-                  onOverride={overrideAction}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
+                <button
+                  onClick={() => triggerSimulation('upi_timeout')}
+                  disabled={simulating !== null}
+                  style={simBtnStyle}
+                >
+                  <Smartphone size={14} color="#06b6d4" />
+                  <span>📱 1. UPI Timeout (₹499) ➔ ICICI Switch</span>
+                </button>
+
+                <button
+                  onClick={() => triggerSimulation('upi_mandate')}
+                  disabled={simulating !== null}
+                  style={simBtnStyle}
+                >
+                  <Clock size={14} color="#f59e0b" />
+                  <span>📱 2. AutoPay Mandate (₹299) ➔ Payday Retry</span>
+                </button>
+
+                <button
+                  onClick={() => triggerSimulation('processor_timeout')}
+                  disabled={simulating !== null}
+                  style={simBtnStyle}
+                >
+                  <CreditCard size={14} color="#10b981" />
+                  <span>💳 3. RuPay Latency (₹2,490) ➔ Secondary Rail</span>
+                </button>
+
+                <button
+                  onClick={() => triggerSimulation('stolen_card')}
+                  disabled={simulating !== null}
+                  style={simBtnStyle}
+                >
+                  <AlertTriangle size={14} color="#ef4444" />
+                  <span>🚨 4. Stolen Card (₹8,500) ➔ Zero-Loss Abandon</span>
+                </button>
+
+                <button
+                  onClick={() => triggerSimulation('retry_limit_exceeded')}
+                  disabled={simulating !== null}
+                  style={simBtnStyle}
+                >
+                  <ShieldAlert size={14} color="#f43f5e" />
+                  <span>🚫 5. 16-Day Limit (₹1,999) ➔ Compliance Block</span>
+                </button>
+
+                <button
+                  onClick={() => triggerSimulation('high_value_hitl')}
+                  disabled={simulating !== null}
+                  style={{ ...simBtnStyle, border: '1px solid rgba(245, 158, 11, 0.4)', background: 'rgba(245, 158, 11, 0.08)' }}
+                >
+                  <UserCheck size={14} color="#f59e0b" />
+                  <span>👑 6. High-Value (₹14,999) ➔ HITL Review</span>
+                </button>
+              </div>
+            </section>
+
+            {/* Autonomous Audit Stream Feed */}
+            <section>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Activity size={15} color="#10b981" />
+                  <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>
+                    AUTONOMOUS REVENUE AUDIT STREAM
+                  </h2>
+                  <span className="font-mono" style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                    fontSize: '10px',
+                    color: 'var(--text-muted)'
+                  }}>
+                    {filteredRecords.length} records
+                  </span>
+                </div>
+
+                {/* Filter Pills */}
+                <div style={{ display: 'flex', gap: '5px' }}>
+                  {['ALL', 'RECOVERED', 'BLOCKED', 'ABANDONED'].map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setFilter(f)}
+                      style={{
+                        background: filter === f ? 'var(--accent-primary)' : 'rgba(255, 255, 255, 0.05)',
+                        color: filter === f ? '#000' : 'var(--text-muted)',
+                        border: '1px solid var(--border-subtle)',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Audit Cards Feed */}
+              {filteredRecords.length === 0 ? (
+                <div style={{
+                  background: 'var(--bg-card)',
+                  border: '1px dashed var(--border-subtle)',
+                  borderRadius: '8px',
+                  padding: '36px 16px',
+                  textAlign: 'center',
+                  color: 'var(--text-muted)'
+                }}>
+                  <Radio size={28} color="var(--text-muted)" style={{ marginBottom: '8px', opacity: 0.5 }} />
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>
+                    Listening for ambient webhook event...
+                  </div>
+                  <p style={{ fontSize: '11px', marginTop: '4px' }}>
+                    Tap any simulation button above or switch to Mobile UPI App view below!
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {filteredRecords.map((record) => (
+                    <AuditCard 
+                      key={record.id} 
+                      record={record} 
+                      hitlMode={hitlMode}
+                      activeOverrideId={activeOverrideId}
+                      setActiveOverrideId={setActiveOverrideId}
+                      onOverride={overrideAction}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )}
       </main>
+
+      {/* MOBILE BOTTOM NAVIGATION BAR (Like Native PhonePe / GPay) */}
+      <nav style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '60px',
+        background: 'rgba(15, 23, 42, 0.98)',
+        borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+        backdropFilter: 'blur(15px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-around',
+        zIndex: 500
+      }}>
+        <button
+          onClick={() => setActiveTab('RADAR')}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: activeTab === 'RADAR' ? '#10b981' : '#64748b',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '3px',
+            fontSize: '10px',
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
+        >
+          <Activity size={18} />
+          <span>RADAR FEED</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('UPI_APP')}
+          style={{
+            background: activeTab === 'UPI_APP' ? 'rgba(6, 182, 212, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+            border: `1px solid ${activeTab === 'UPI_APP' ? '#06b6d4' : 'rgba(255, 255, 255, 0.1)'}`,
+            color: activeTab === 'UPI_APP' ? '#06b6d4' : '#f8fafc',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 14px',
+            borderRadius: '20px',
+            fontSize: '11px',
+            fontWeight: 800,
+            cursor: 'pointer',
+            boxShadow: activeTab === 'UPI_APP' ? '0 0 15px rgba(6, 182, 212, 0.3)' : 'none'
+          }}
+        >
+          <Smartphone size={16} />
+          <span>📱 MOBILE UPI APP</span>
+        </button>
+
+        <a
+          href={`${API_BASE}/api/audit/csv`}
+          download="payrevive_audit_report.csv"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: '#64748b',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '3px',
+            fontSize: '10px',
+            fontWeight: 700,
+            textDecoration: 'none'
+          }}
+        >
+          <Download size={18} />
+          <span>AUDIT CSV</span>
+        </a>
+      </nav>
 
       {/* QR Code Modal for Mobile Phone Access */}
       {showQRModal && (
@@ -679,7 +928,7 @@ export default function App() {
           left: 0,
           width: '100vw',
           height: '100vh',
-          background: 'rgba(0,0,0,0.8)',
+          background: 'rgba(0,0,0,0.85)',
           backdropFilter: 'blur(8px)',
           display: 'flex',
           alignItems: 'center',
@@ -689,7 +938,7 @@ export default function App() {
           <div style={{
             background: 'var(--bg-card)',
             border: '1px solid var(--border-active)',
-            borderRadius: '12px',
+            borderRadius: '14px',
             padding: '24px',
             maxWidth: '380px',
             width: '90%',
@@ -699,7 +948,7 @@ export default function App() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '15px' }}>
                 <Smartphone size={18} color="#06b6d4" />
-                <span>Open Live on Mobile Phone</span>
+                <span>Open App on Any Mobile</span>
               </div>
               <button onClick={() => setShowQRModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
                 <X size={18} />
@@ -707,7 +956,7 @@ export default function App() {
             </div>
 
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Scan this QR code with your phone camera (connect to same Wi-Fi) to watch PayRevive live on your smartphone!
+              Scan with your phone camera (on same Wi-Fi) to run the full UPI app on Android or iPhone!
             </p>
 
             {/* QR Code Image */}
@@ -719,7 +968,7 @@ export default function App() {
               marginBottom: '16px'
             }}>
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mobileNetworkUrl)}`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(mobileNetworkUrl)}`}
                 alt="Mobile QR Code"
                 style={{ width: '180px', height: '180px', display: 'block' }}
               />
@@ -823,33 +1072,6 @@ export default function App() {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div>
-                  <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Payment Rail</label>
-                  <select
-                    value={customForm.card_network}
-                    onChange={(e) => setCustomForm({ ...customForm, card_network: e.target.value })}
-                    style={inputStyle}
-                  >
-                    <option value="UPI / NPCI">UPI / NPCI</option>
-                    <option value="RUPAY">RUPAY</option>
-                    <option value="VISA">VISA</option>
-                    <option value="MASTERCARD">MASTERCARD</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Day of Month (1-31)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="31"
-                    value={customForm.day_of_month}
-                    onChange={(e) => setCustomForm({ ...customForm, day_of_month: parseInt(e.target.value) || 1 })}
-                    style={inputStyle}
-                  />
-                </div>
-              </div>
-
               <button
                 type="submit"
                 style={{
@@ -870,25 +1092,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {/* Footer */}
-      <footer style={{
-        borderTop: '1px solid var(--border-subtle)',
-        padding: '14px 20px',
-        fontSize: '11px',
-        color: 'var(--text-muted)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        background: 'rgba(15, 23, 42, 0.95)',
-        flexWrap: 'wrap',
-        gap: '6px'
-      }}>
-        <div>PayRevive • Built for <strong>UPSIDE DOWN.EXE</strong> (GNDU TSS)</div>
-        <div className="font-mono" style={{ color: '#10b981' }}>
-          MOBILE-READY • ZERO CHATBOX • CROSS-TOOL DISPATCH • HUMAN-IN-THE-LOOP
-        </div>
-      </footer>
     </div>
   );
 }
@@ -912,7 +1115,7 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
     }}>
       {/* Top Banner */}
       <div style={{
-        padding: '10px 16px',
+        padding: '10px 14px',
         background: 'rgba(255, 255, 255, 0.02)',
         borderBottom: '1px solid var(--border-subtle)',
         display: 'flex',
@@ -1025,20 +1228,20 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
       </div>
 
       {/* The 4-Part System Grid */}
-      <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+      <div style={{ padding: '14px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
         {/* Part 1: Failure Trigger & Telemetry */}
         <div style={stepBoxStyle}>
           <div style={stepHeaderStyle}>
             <span className="font-mono" style={{ fontSize: '10px', color: '#f59e0b' }}>01 // TRIGGER</span>
-            <AlertCircle size={14} color="#f59e0b" />
+            <AlertCircle size={13} color="#f59e0b" />
           </div>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>
             {transaction.decline_code.toUpperCase()}
           </div>
           <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '4px 0' }}>
             {transaction.decline_message}
           </p>
-          <div className="font-mono" style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: 'auto' }}>
+          <div className="font-mono" style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: 'auto' }}>
             Rail: {transaction.card_network} • Day {transaction.day_of_month}
           </div>
         </div>
@@ -1047,7 +1250,7 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
         <div style={stepBoxStyle}>
           <div style={stepHeaderStyle}>
             <span className="font-mono" style={{ fontSize: '10px', color: '#06b6d4' }}>02 // SHAP DIAGNOSIS</span>
-            <Cpu size={14} color="#06b6d4" />
+            <Cpu size={13} color="#06b6d4" />
           </div>
           <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-main)', marginTop: '2px' }}>
             Root Cause:
@@ -1072,7 +1275,7 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
                 border: `1px solid ${s.shap_value > 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
                 color: s.shap_value > 0 ? '#10b981' : '#ef4444'
               }}>
-                {s.shap_value > 0 ? `+${(s.shap_value * 100).toFixed(0)}%` : `${(s.shap_value * 100).toFixed(0)}%`} {s.feature}: {s.description.slice(0, 40)}...
+                {s.shap_value > 0 ? `+${(s.shap_value * 100).toFixed(0)}%` : `${(s.shap_value * 100).toFixed(0)}%`} {s.feature}: {s.description.slice(0, 36)}...
               </div>
             ))}
           </div>
@@ -1082,7 +1285,7 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
         <div style={stepBoxStyle}>
           <div style={stepHeaderStyle}>
             <span className="font-mono" style={{ fontSize: '10px', color: '#a855f7' }}>03 // BANDIT ACTION</span>
-            <TrendingUp size={14} color="#a855f7" />
+            <TrendingUp size={13} color="#a855f7" />
           </div>
           <div style={{ marginTop: '2px' }}>
             <span className="font-mono" style={{
@@ -1111,7 +1314,7 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
             <span className="font-mono" style={{ fontSize: '10px', color: isRecovered ? '#10b981' : isBlocked ? '#ef4444' : '#06b6d4' }}>
               04 // COMPLIANCE & OUTCOME
             </span>
-            <ShieldCheck size={14} color={isRecovered ? '#10b981' : isBlocked ? '#ef4444' : '#06b6d4'} />
+            <ShieldCheck size={13} color={isRecovered ? '#10b981' : isBlocked ? '#ef4444' : '#06b6d4'} />
           </div>
 
           <div style={{ fontSize: '11px', color: compliance.status === 'APPROVED' ? '#10b981' : '#ef4444', fontWeight: 600, margin: '2px 0' }}>
@@ -1148,7 +1351,7 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
       {/* Challenge Feature: Cross-Tool Action Dispatch */}
       {dispatched_tools && dispatched_tools.length > 0 && (
         <div style={{
-          padding: '8px 16px',
+          padding: '8px 14px',
           background: 'rgba(0, 0, 0, 0.45)',
           borderTop: '1px solid rgba(255, 255, 255, 0.05)',
           display: 'flex',
@@ -1187,7 +1390,7 @@ const metricCardStyle = {
   background: 'var(--bg-card)',
   border: '1px solid var(--border-subtle)',
   borderRadius: '8px',
-  padding: '14px',
+  padding: '12px',
 };
 
 const simBtnStyle = {
@@ -1197,7 +1400,7 @@ const simBtnStyle = {
   background: 'rgba(255, 255, 255, 0.04)',
   border: '1px solid var(--border-subtle)',
   color: 'var(--text-main)',
-  padding: '8px 12px',
+  padding: '8px 10px',
   borderRadius: '6px',
   cursor: 'pointer',
   fontSize: '11px',
@@ -1209,7 +1412,7 @@ const stepBoxStyle = {
   background: 'rgba(0, 0, 0, 0.35)',
   border: '1px solid rgba(255, 255, 255, 0.05)',
   borderRadius: '6px',
-  padding: '12px',
+  padding: '10px',
   display: 'flex',
   flexDirection: 'column'
 };
