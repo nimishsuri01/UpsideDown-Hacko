@@ -973,7 +973,7 @@ export default function App() {
               <div>{stateChangeNarrative}</div>
               {isHdfcOutage && (
                 <button
-                  onClick={() => runSimulation('upi_timeout')}
+                  onClick={() => triggerSimulation('upi_timeout')}
                   style={{
                     marginTop: '6px',
                     background: 'var(--g-blue-container)',

@@ -499,11 +499,40 @@ class AutonomousRecoveryEngine:
 
     async def override_record_action(self, record_id: str, new_action: str) -> Optional[RecoveryAuditRecord]:
         """Human-in-the-Loop Operator Override"""
+        try:
+            action_enum = ActionType(new_action)
+        except ValueError:
+            return None
+
         for r in self.audit_records:
             if r.id == record_id:
-                r.optimization.chosen_action = ActionType(new_action)
+                old_action = r.optimization.chosen_action
+                r.optimization.chosen_action = action_enum
                 r.hitl_status = "OVERRIDDEN_BY_OPERATOR"
                 r.dispatched_tools.append(f"Human Operator Override -> {new_action}")
+
+                # Update outcome and metrics if action type changes
+                if action_enum == ActionType.ABANDON_NO_RETRY and r.outcome != RecoveryOutcome.ABANDONED_FEES_SAVED:
+                    if r.outcome in [RecoveryOutcome.RECOVERED, RecoveryOutcome.SCHEDULED]:
+                        self.metrics["total_recovered_usd"] = max(0.0, self.metrics["total_recovered_usd"] - r.recovered_amount_usd)
+                    r.outcome = RecoveryOutcome.ABANDONED_FEES_SAVED
+                    r.recovered_amount_usd = 0.0
+                    r.processing_fee_saved_usd = 0.35
+                    self.metrics["total_fees_saved_usd"] += 0.35
+                elif action_enum in [ActionType.INSTANT_REROUTE_BACKUP_GATEWAY, ActionType.SCHEDULE_SMART_PAYDAY_RETRY, ActionType.PROACTIVE_PREEMPTIVE_FAILOVER, ActionType.AUTO_CARD_UPDATER]:
+                    if r.outcome == RecoveryOutcome.ABANDONED_FEES_SAVED:
+                        self.metrics["total_fees_saved_usd"] = max(0.0, self.metrics["total_fees_saved_usd"] - r.processing_fee_saved_usd)
+                        r.processing_fee_saved_usd = 0.0
+                    r.outcome = RecoveryOutcome.RECOVERED
+                    if r.recovered_amount_usd == 0.0:
+                        r.recovered_amount_usd = r.transaction.amount
+                        self.metrics["total_recovered_usd"] += r.recovered_amount_usd
+
+                # Recalculate recovery rate
+                recovered_count = sum(1 for rec in self.audit_records if rec.outcome in [RecoveryOutcome.RECOVERED, RecoveryOutcome.SCHEDULED])
+                if self.metrics["total_events"] > 0:
+                    self.metrics["recovery_rate_pct"] = round((recovered_count / self.metrics["total_events"]) * 100, 1)
+
                 await self.broadcast({
                     "type": "RECORD_UPDATED",
                     "record": r.model_dump(),

@@ -1,7 +1,7 @@
 import asyncio
 import random
 import logging
-from .models import FailedTransactionEvent, PaymentDeclineCode, CardNetwork
+from .models import FailedTransactionEvent, PaymentDeclineCode, CardNetwork, PaymentMethod
 
 logger = logging.getLogger("PayRevive.TrafficGen")
 
@@ -10,15 +10,22 @@ class AmbientTrafficGenerator:
     Simulates real-world SaaS / E-commerce live payment failure streams.
     Allows judges to watch the autonomous recovery loop operate continuously in real time.
     """
-    BANKS = ["Chase Bank", "HDFC Bank", "Wells Fargo", "State Bank of India", "CitiBank", "ICICI Bank", "Barclays", "Bank of America"]
-    NETWORKS = [CardNetwork.VISA, CardNetwork.MASTERCARD, CardNetwork.RUPAY, CardNetwork.AMEX]
+    BANKS = [
+        "HDFC Bank (UPI / GPay)", 
+        "State Bank of India (SBI)", 
+        "ICICI Bank (UPI)", 
+        "Axis Bank (PhonePe)", 
+        "Kotak Mahindra", 
+        "Punjab National Bank (RuPay)"
+    ]
+    NETWORKS = [CardNetwork.UPI_NPCI, CardNetwork.RUPAY, CardNetwork.VISA, CardNetwork.MASTERCARD]
     DECLINE_SCENARIOS = [
-        (PaymentDeclineCode.PROCESSOR_TIMEOUT, "Gateway timeout: bank auth server unreachable > 5000ms", 0.30),
-        (PaymentDeclineCode.INSUFFICIENT_FUNDS, "Decline 51: Insufficient funds in account", 0.35),
-        (PaymentDeclineCode.CARD_EXPIRED, "Decline 54: Expired card credential", 0.15),
-        (PaymentDeclineCode.NETWORK_ERROR, "Socket hangup on secondary card authorization pipe", 0.10),
-        (PaymentDeclineCode.DO_NOT_HONOR, "Decline 05: Do not honor generic refusal", 0.06),
-        (PaymentDeclineCode.LOST_OR_STOLEN, "Decline 41: Lost or stolen card flag reported by cardholder", 0.04),
+        (PaymentDeclineCode.UPI_SERVER_TIMEOUT, "Decline U30: NPCI UPI core banking timeout (>2400ms)", 0.35),
+        (PaymentDeclineCode.UPI_MANDATE_INSUFFICIENT_FUNDS, "Decline M05: UPI recurring AutoPay mandate failed", 0.25),
+        (PaymentDeclineCode.PROCESSOR_TIMEOUT, "Gateway timeout: RuPay switch bank auth server unreachable", 0.15),
+        (PaymentDeclineCode.CARD_EXPIRED, "Decline 54: Expired card credential in vault", 0.10),
+        (PaymentDeclineCode.DO_NOT_HONOR, "Decline 05: Do not honor bank refusal", 0.08),
+        (PaymentDeclineCode.LOST_OR_STOLEN, "Decline 41: Lost or stolen card flag reported by cardholder", 0.07),
     ]
 
     def __init__(self, engine, interval_seconds: float = 3.5):
@@ -43,7 +50,7 @@ class AmbientTrafficGenerator:
     async def _run_loop(self):
         while self.is_running:
             try:
-                await asyncio.sleep(random.uniform(3.0, 5.5))
+                await asyncio.sleep(self.interval_seconds)
                 if not self.is_running:
                     break
 
@@ -53,7 +60,7 @@ class AmbientTrafficGenerator:
                 decline_code = scenarios[idx]
                 decline_msg = messages[idx]
 
-                amount = round(random.choice([29.0, 49.0, 89.0, 149.0, 249.0, 499.0, 850.0, 1200.0]), 2)
+                amount = round(random.choice([299.0, 499.0, 850.0, 1299.0, 1999.0, 2490.0, 4999.0]), 2)
                 bank = random.choice(self.BANKS)
                 network = random.choice(self.NETWORKS)
                 tenure = random.randint(1, 30)
@@ -62,7 +69,8 @@ class AmbientTrafficGenerator:
 
                 tx = FailedTransactionEvent(
                     amount=amount,
-                    currency="USD",
+                    currency="INR",
+                    payment_method=PaymentMethod.UPI if network == CardNetwork.UPI_NPCI else PaymentMethod.CARD,
                     decline_code=decline_code,
                     decline_message=decline_msg,
                     issuing_bank=bank,
