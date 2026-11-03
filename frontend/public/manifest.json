@@ -1,0 +1,17 @@
+{
+  "short_name": "PayRevive",
+  "name": "PayRevive // Mobile UPI Sentinel",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#090d16",
+  "theme_color": "#0f172a",
+  "display": "standalone",
+  "orientation": "portrait"
+}
+

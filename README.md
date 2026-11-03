@@ -1,74 +1,92 @@
 # 💳 PayRevive // Autonomous AI Revenue Recovery Engine
 > Built for the **UPSIDE DOWN.EXE** Hackathon (Technical Student Society, GNDU Amritsar)  
-> **Problem Statement:** `PS-02 : Zero-Prompt AI` ("Kill the Chatbox")
+> **Problem Statement:** `PS-02 : Zero-Prompt AI` ("Kill the Chatbox. Build AI that responds to the world, not to a typed prompt.")
 
 ---
 
-## 🎯 The Problem: Involuntary Churn & Payment Failure Losses
-When online transactions fail (credit card declines, network timeouts, authorization errors), businesses lose massive revenue automatically:
-1. **Static Hand-Written Rules:** Retrying blindly (e.g. 3 times at set intervals) burns fees and irritates customers.
-2. **Zero Cause Analysis:** Retrying terminal declines (e.g. expired or stolen cards) wastes $0.35+ per transaction.
-3. **Compliance Risks:** Automated retry storms trigger Visa/Mastercard network fines and merchant account bans.
+## 🎯 The Challenge & Why Chatboxes Fail in FinTech
+Most AI tools require a human to sit in front of a chatbox, type a prompt, and babysit conversations. But in high-volume payment processing (UPI, Razorpay, Paytm, Stripe, Visa, Mastercard):
+1. **Payments fail in milliseconds:** When an HDFC or ICICI server drops a UPI transaction or a recurring mandate fails, nobody has time to open ChatGPT or type a prompt.
+2. **Blind retries burn millions:** Retrying blindly burns interchange fees ($0.35/retry) and triggers Visa Rule 5.4.1.3 fines and merchant account bans.
+3. **True automation must be ambient:** Good automation notices failure events, understands context, acts across tools and devices, and recovers autonomously while keeping people in control.
 
 ---
 
-## 💡 The Solution: PayRevive (A 4-Part Zero-Prompt System)
-PayRevive operates as an **event-driven, autonomous revenue recovery sentinel** with **ZERO chatbox interaction**.
+## 💡 The Solution: PayRevive Architecture
+PayRevive is an **event-driven, autonomous revenue recovery sentinel** with **ZERO chatbox interaction**.
 
 ```
-[ WEBHOOK TRIGGER ] ➔ [ XGBOOST + SHAP ] ➔ [ BANDIT OPTIMIZATION ] ➔ [ COMPLIANCE FILTER ] ➔ [ RECOVERY OUTCOME ]
-  Payment Failed        Root Cause & P(Rec)     Contextual Action        Visa/Mastercard Mandate    Recovered Revenue
-  Stripe / Razorpay     Feature Attribution     Net Expected Value       Velocity & Fraud Check     Fees Preserved
+[ WEBHOOK SENSOR ] ➔ [ XGBOOST + SHAP ] ➔ [ BANDIT OPTIMIZATION ] ➔ [ REGULATORY SHIELD ] ➔ [ CROSS-TOOL DISPATCH ]
+  UPI / Card Failure    Root Cause & P(Rec)     Multi-Armed Bandit       Visa/Mastercard Mandate   • ICICI Secondary Rail
+  Bank Server Drop      Feature Attribution     Expected Net ROI         Velocity & Fraud Check    • WhatsApp 1-Click Link
+  Mandate Drop          TreeSHAP Weights        Dynamic Rerouting        Anti-Retry Blacklist      • Slack FinOps Alert
 ```
-
-### 1. Root-Cause Diagnosis (XGBoost + TreeSHAP)
-As soon as a payment failure webhook arrives, the engine analyzes transaction telemetry (decline code, issuer bank, customer tenure, day of month, retry history) and computes:
-* Precise recovery probability $P(recovery)$.
-* **SHAP Feature Attribution Values:** Visualized impact metrics explaining *why* the AI diagnosed the failure.
-
-### 2. Action Optimization (Contextual Multi-Armed Bandit)
-Instead of static rules, an adaptive bandit algorithm chooses the optimal action only when expected payout exceeds retry costs:
-* `INSTANT_REROUTE_BACKUP_GATEWAY`: Instant failover via secondary rail for bank/processor timeouts.
-* `SCHEDULE_SMART_PAYDAY_RETRY`: Aligns retries to 1st or 5th of the month at 08:30 AM (payroll liquidity capture).
-* `AUTO_CARD_UPDATER`: Background account token update for expired cards without bothering the customer.
-* `ABANDON_NO_RETRY`: Immediately abandons terminal failures (stolen cards) to save $0.35 processing fees.
-
-### 3. Strict Compliance Guardrails
-Every proposed recovery action passes through real-world payment network filters:
-* **Visa Core Mandate:** Maximum 4 retry attempts within 16 consecutive calendar days.
-* **Mastercard Excessive Retry Standards:** Velocity limits (Max 2 attempts in 24 hours).
-* **Terminal Fraud Filter:** Absolute prohibition on retrying lost/stolen cards.
-
-### 4. Autonomous Audit Trail & Real-time Live Radar
-* Operates 100% in the background via webhooks without needing manual user prompts.
-* WebSocket streams live metrics to an executive FinTech Radar Dashboard:
-  * **Total Failed Revenue at Risk ($)**
-  * **Total Revenue Recovered ($)**
-  * **Processing Fees Saved ($)**
-  * **Autonomous Recovery Rate (%)**
 
 ---
 
-## 🚀 How to Run (1-Command Startup)
+## 🌟 Key Features & Problem Statement Fulfillment
 
+### 1. Zero Chatbox / 100% Ambient Execution
+* Listens to payment webhooks from UPI switches (NPCI, PhonePe, GPay) and card gateways (RuPay, Visa, Mastercard).
+* Zero user prompts required. Runs continuously in the background.
+
+### 2. Understands Context & State (XGBoost + TreeSHAP)
+* Analyzes decline telemetry (decline codes, issuer bank latency, day of month, tenure, retry count).
+* Computes precise recovery probabilities $P(recovery)$ and calculates local TreeSHAP attribution scores explaining *why* the AI made the decision.
+
+### 3. Acts Across Tools & Devices (Cross-Tool Dispatch)
+* **Tool 1 (Payment Rail):** Seamlessly reroutes failed traffic to secondary ICICI / Axis UPI rails in <50ms.
+* **Tool 2 (Customer Comm):** Automatically dispatches an OTP-less WhatsApp/SMS 1-click recovery link directly to the customer.
+* **Tool 3 (Merchant Ops):** Posts incident resolution alerts to merchant Slack (`#finops-radar-alerts`).
+* **Tool 4 (Mobile Phone):** Any smartphone can scan the QR code to run the **Mobile UPI App** with physical haptic vibration and audio feedback!
+
+### 4. Recovers When Things Go Wrong (Multi-Armed Bandit Optimizer)
+* Evaluates expected net ROI across competing recovery strategies:
+  * `INSTANT_REROUTE_BACKUP_GATEWAY`: Instant failover for bank timeouts.
+  * `SCHEDULE_SMART_PAYDAY_RETRY`: Captures payroll liquidity on the 1st or 5th of the month.
+  * `AUTO_CARD_UPDATER`: Updates tokenized credentials via Visa Account Updater (VAU/ABU).
+  * `ABANDON_NO_RETRY`: Aborts lost/stolen card retries to preserve fees.
+
+### 5. "While Keeping People in Control" (Human-in-the-Loop Mode & Override)
+* **Autonomous vs Supervised Mode Toggle:** Switch between 100% Autonomous AI and Supervised Mode.
+* **1-Click Manual Override:** Operators can intervene and override any AI decision directly on the live feed.
+* **Emergency Kill Switch:** Instant administrative control.
+
+### 6. Ambient Gateway & Bank Telemetry Sensor
+* Monitors live bank health:
+  * `NPCI UPI Switch`: 99.8% Healthy
+  * `HDFC Core Banking`: Outage Detected (1850ms) ➔ Proactive auto-reroute to ICICI
+  * `ICICI Backup Rail`: Optimal (85ms)
+
+---
+
+## 📱 Mobile Application (PWA)
+PayRevive is configured as a **Progressive Web App (PWA)**:
+* Scan the QR Code on any phone (Android or iPhone) on the same Wi-Fi.
+* Access the **Mobile UPI App Simulator (PhonePe/GPay View)** to experience a real UPI payment failure, physical phone vibration, and ambient AI recovery right in your hands!
+* Can be installed to the mobile home screen as a standalone app.
+
+---
+
+## 🚀 Quickstart & How to Run
+
+### Method 1: Double-Click Desktop Shortcut
+Double-click **`PayRevive`** or **`Launch_PayRevive.bat`** on your Desktop. It automatically starts the server and opens your browser at **`http://localhost:8000`**.
+
+### Method 2: Command Line
 ```powershell
 python run.py
 ```
 
-Opens the live dashboard at **`http://localhost:8000`**.
+### Method 3: Mobile Phone
+1. Open dashboard on laptop.
+2. Click **`[OPEN ON PHONE (QR)]`**.
+3. Scan with your phone camera to run on mobile!
 
 ---
 
-## 🎪 Live Demo Walkthrough for Hackathon Judges
-
-1. **Point out the Zero-Prompt Architecture:**
-   * Highlight that there is **NO chat window or text input**. The system is 100% ambient and webhook-driven.
-2. **Click the 5 Testbench Triggers:**
-   * **Trigger 1 (Gateway Timeout - $249.00):** Watch XGBoost diagnose the transient timeout and the Bandit instantly reroute via the Adyen Direct Rail with 0.0ms latency.
-   * **Trigger 2 (Insufficient Funds - $89.00):** Watch the Temporal Bandit calculate low mid-month liquidity and schedule a smart payday retry on the 1st of next month.
-   * **Trigger 3 (Card Expired - $199.00):** Watch the engine dispatch an automated card token updater query without disturbing the customer.
-   * **Trigger 4 (Stolen Card - $550.00):** Watch the bandit choose zero-loss abandonment to save processing fees.
-   * **Trigger 5 (16-Day Limit Breach - $140.00):** Watch the Compliance Guardrail block the action, protecting the merchant from Visa/Mastercard regulatory penalties.
-3. **Show Financial Counters:**
-   * Watch **Recovered Revenue** and **Fees Saved** counters update live in real-time!
-
+## 👥 Hackathon Team & Repository
+* **Project:** PayRevive // Autonomous AI Revenue Recovery Engine
+* **Team Repository:** `https://github.com/nimishsuri01/UpsideDown-Hacko.git`
+* **Author Repository:** `https://github.com/Manjotpreet-Singh/Zero-Prompt-AI.git`
+* **Hackathon:** UPSIDE DOWN.EXE (Technical Student Society, GNDU Amritsar)

@@ -27,17 +27,20 @@ import {
   Check,
   Settings,
   UserCheck,
-  RotateCw,
-  Send,
-  Lock,
-  ChevronRight
+  Volume2,
+  VolumeX,
+  MessageSquare,
+  Share2,
+  ExternalLink,
+  ChevronRight,
+  Send
 } from 'lucide-react';
 
 const API_BASE = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
 const WS_URL = typeof window !== 'undefined' ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws` : 'ws://localhost:8000/ws';
 
 // Synthetic Multi-Sensory Feedback (Audio Chime + Physical Phone Vibration)
-function triggerDeviceFeedback() {
+function triggerDeviceFeedback(soundEnabled = true) {
   // 1. Physical Phone Haptic Vibration
   if (typeof navigator !== 'undefined' && navigator.vibrate) {
     try {
@@ -46,22 +49,24 @@ function triggerDeviceFeedback() {
   }
 
   // 2. Cybernetic Audio Chime via Web Audio API (Zero external MP3 dependency)
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1); // A5
-    gain.gain.setValueAtTime(0.12, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.35);
-  } catch (e) {}
+  if (soundEnabled) {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1); // A5
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } catch (e) {}
+  }
 }
 
 export default function App() {
@@ -82,6 +87,7 @@ export default function App() {
   const [showCustomModal, setShowCustomModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   // Active View Tab: 'RADAR' (Live Stream) vs 'UPI_APP' (Mobile UPI Simulator)
   const [activeTab, setActiveTab] = useState('RADAR');
@@ -95,6 +101,12 @@ export default function App() {
   // Challenge Features: Human-in-the-Loop & Override
   const [hitlMode, setHitlMode] = useState(false);
   const [activeOverrideId, setActiveOverrideId] = useState(null);
+
+  // Toast Alert State
+  const [toast, setToast] = useState(null);
+
+  // Tool Dispatch Preview Modal ('WHATSAPP' | 'SLACK' | null)
+  const [toolModal, setToolModal] = useState(null);
 
   // Mobile network address (local IP)
   const mobileNetworkUrl = typeof window !== 'undefined' ? window.location.origin : 'http://192.168.69.211:8000';
@@ -133,8 +145,17 @@ export default function App() {
           } else if (data.type === 'NEW_RECOVERY_EVENT') {
             setMetrics(data.metrics || {});
             setAuditRecords((prev) => [data.record, ...prev]);
+            
+            // Multi-sensory alert on recovery
             if (data.record.outcome === 'RECOVERED' || data.record.outcome === 'SCHEDULED') {
-              triggerDeviceFeedback();
+              triggerDeviceFeedback(soundEnabled);
+              setToast({
+                title: '⚡ Autonomous Recovery Succeeded',
+                amount: data.record.recovered_amount_usd,
+                action: data.record.optimization.chosen_action,
+                tools: data.record.dispatched_tools
+              });
+              setTimeout(() => setToast(null), 4500);
             }
           } else if (data.type === 'RECORD_UPDATED') {
             setMetrics(data.metrics || {});
@@ -167,7 +188,7 @@ export default function App() {
       clearTimeout(reconnectTimer);
       if (wsRef.current) wsRef.current.close();
     };
-  }, []);
+  }, [soundEnabled]);
 
   const toggleTraffic = async () => {
     const endpoint = trafficRunning ? '/api/traffic/stop' : '/api/traffic/start';
@@ -237,7 +258,7 @@ export default function App() {
             const res = await fetch(`${API_BASE}/api/simulate/upi_timeout`, { method: 'POST' });
             const rec = await res.json();
             setLastUpiRecord(rec);
-            triggerDeviceFeedback();
+            triggerDeviceFeedback(soundEnabled);
             setUpiStage('SUCCESS');
             setUpiStageInfo('Payment Autonomous Recovered! Switched to ICICI Secondary Rail in 41ms.');
           } catch (e) {
@@ -258,7 +279,7 @@ export default function App() {
             const res = await fetch(`${API_BASE}/api/simulate/upi_mandate`, { method: 'POST' });
             const rec = await res.json();
             setLastUpiRecord(rec);
-            triggerDeviceFeedback();
+            triggerDeviceFeedback(soundEnabled);
             setUpiStage('SUCCESS');
             setUpiStageInfo('AutoPay Mandate Preserved! Scheduled retry for salary day (+1) + WhatsApp alert dispatched.');
           } catch (e) {
@@ -340,7 +361,7 @@ export default function App() {
                 borderRadius: '4px',
                 color: '#10b981'
               }}>
-                MOBILE UPI SENTINEL
+                PS-02 : ZERO-PROMPT AI
               </span>
             </div>
           </div>
@@ -348,6 +369,25 @@ export default function App() {
 
         {/* Ambient Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          {/* Audio Chime Toggle */}
+          <button
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            title={soundEnabled ? "Mute audio chimes" : "Enable audio chimes"}
+            style={{
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid var(--border-subtle)',
+              color: soundEnabled ? '#10b981' : '#64748b',
+              padding: '5px 8px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              fontSize: '10px'
+            }}
+          >
+            {soundEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+          </button>
+
           {/* HITL Switch */}
           <button
             onClick={toggleHitlMode}
@@ -423,6 +463,39 @@ export default function App() {
         </div>
       </header>
 
+      {/* Floating Toast Notification on Recovery */}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          top: '65px',
+          right: '16px',
+          zIndex: 999,
+          background: 'rgba(15, 23, 42, 0.95)',
+          border: '1px solid #10b981',
+          boxShadow: '0 10px 25px rgba(16, 185, 129, 0.3)',
+          borderRadius: '8px',
+          padding: '10px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          maxWidth: '360px',
+          animation: 'slideIn 0.3s ease-out'
+        }}>
+          <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Zap size={14} color="#10b981" />
+          </div>
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: '#10b981' }}>{toast.title}</div>
+            <div style={{ fontSize: '10px', color: '#e2e8f0', marginTop: '1px' }}>
+              Recovered <b>₹{toast.amount}</b> via <code>{toast.action}</code>
+            </div>
+          </div>
+          <button onClick={() => setToast(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', marginLeft: 'auto' }}>
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
       {/* Main Content Area */}
       <main style={{ flex: 1, padding: '14px 16px', maxWidth: '1440px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
         
@@ -448,7 +521,7 @@ export default function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10b981' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
-              NPCI UPI: <b>99.8% Healthy</b>
+              NPCI UPI: <b>99.8% Healthy</b> (110ms)
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#ef4444' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }}></span>
@@ -457,6 +530,10 @@ export default function App() {
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10b981' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
               ICICI Backup Rail: <b>ACTIVE (85ms)</b>
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#38bdf8' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#38bdf8' }}></span>
+              Razorpay Gateway: <b>99.4% Active</b>
             </span>
           </div>
         </div>
@@ -835,6 +912,7 @@ export default function App() {
                       activeOverrideId={activeOverrideId}
                       setActiveOverrideId={setActiveOverrideId}
                       onOverride={overrideAction}
+                      onOpenToolModal={(type, rec) => setToolModal({ type, record: rec })}
                     />
                   ))}
                 </div>
@@ -919,6 +997,122 @@ export default function App() {
           <span>AUDIT CSV</span>
         </a>
       </nav>
+
+      {/* Cross-Tool Dispatch Preview Modal (Simulated WhatsApp / Slack alert) */}
+      {toolModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0,0,0,0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100
+        }}>
+          <div style={{
+            background: '#0f172a',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            borderRadius: '12px',
+            padding: '20px',
+            maxWidth: '420px',
+            width: '90%',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.8)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 700 }}>
+                {toolModal.type === 'WHATSAPP' ? (
+                  <>
+                    <MessageSquare size={16} color="#25D366" />
+                    <span style={{ color: '#25D366' }}>Dispatched Customer WhatsApp Message</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 size={16} color="#E01E5A" />
+                    <span style={{ color: '#E01E5A' }}>Dispatched Merchant Slack Incident</span>
+                  </>
+                )}
+              </div>
+              <button onClick={() => setToolModal(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                <X size={16} />
+              </button>
+            </div>
+
+            {toolModal.type === 'WHATSAPP' ? (
+              <div style={{
+                background: '#0b141a',
+                borderRadius: '8px',
+                padding: '12px',
+                border: '1px solid #202c33'
+              }}>
+                <div style={{ fontSize: '11px', color: '#8696a0', marginBottom: '8px' }}>
+                  To: Customer (+91 98765-XXXXX) • Automated Zero-Prompt Link
+                </div>
+                <div style={{
+                  background: '#005c4b',
+                  color: '#e9edef',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  lineHeight: '1.4'
+                }}>
+                  <div>👋 Hi Rahul, your payment of <b>₹{toolModal.record.transaction.amount}</b> to Swiggy timed out on your primary bank.</div>
+                  <div style={{ marginTop: '6px' }}>⚡ PayRevive auto-failover scheduled: Tap below to complete with 1-click UPI (No OTP needed):</div>
+                  <div style={{ marginTop: '8px', color: '#53bdeb', textDecoration: 'underline' }}>
+                    https://payrevive.ai/pay/{toolModal.record.id}
+                  </div>
+                  <div style={{ textAlign: 'right', fontSize: '9px', color: '#8696a0', marginTop: '4px' }}>Just now • Delivered ✓✓</div>
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                background: '#1a1d21',
+                borderRadius: '8px',
+                padding: '12px',
+                border: '1px solid #383f45'
+              }}>
+                <div style={{ fontSize: '11px', color: '#9ba1a6', marginBottom: '8px' }}>
+                  Channel: #finops-radar-alerts • Bot: PayRevive-Sentinel
+                </div>
+                <div style={{
+                  background: '#222529',
+                  borderLeft: '4px solid #10b981',
+                  padding: '10px 12px',
+                  borderRadius: '4px',
+                  fontSize: '12px'
+                }}>
+                  <div style={{ fontWeight: 700, color: '#10b981' }}>⚡ REVENUE RECOVERED: ₹{toolModal.record.recovered_amount_usd}</div>
+                  <div style={{ color: '#d1d2d3', marginTop: '4px', fontSize: '11px' }}>
+                    • Cause: {toolModal.record.diagnosis.root_cause}<br />
+                    • Action: {toolModal.record.optimization.chosen_action}<br />
+                    • Latency: {toolModal.record.latency_ms}ms • Zero Prompts Required
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => setToolModal(null)}
+              style={{
+                width: '100%',
+                marginTop: '14px',
+                background: 'rgba(255,255,255,0.08)',
+                color: '#fff',
+                border: '1px solid rgba(255,255,255,0.1)',
+                padding: '8px',
+                borderRadius: '6px',
+                fontSize: '11px',
+                cursor: 'pointer'
+              }}
+            >
+              Close Dispatch Preview
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* QR Code Modal for Mobile Phone Access */}
       {showQRModal && (
@@ -1097,7 +1291,7 @@ export default function App() {
 }
 
 // Subcomponent: 4-Part Audit Record Card with Cross-Tool Dispatch & Human-in-the-Loop Override
-function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, onOverride }) {
+function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, onOverride, onOpenToolModal }) {
   const { transaction, diagnosis, optimization, compliance, outcome, recovered_amount_usd, processing_fee_saved_usd, latency_ms, dispatched_tools, hitl_status } = record;
 
   const isRecovered = outcome === 'RECOVERED' || outcome === 'SCHEDULED';
@@ -1363,22 +1557,38 @@ function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, on
           <span className="font-mono" style={{ color: '#06b6d4', fontWeight: 700, fontSize: '10px' }}>
             CROSS-TOOL DISPATCH:
           </span>
-          {dispatched_tools.map((tool, idx) => (
-            <span key={idx} className="font-mono" style={{
-              background: 'rgba(6, 182, 212, 0.1)',
-              border: '1px solid rgba(6, 182, 212, 0.25)',
-              color: '#38bdf8',
-              padding: '2px 6px',
-              borderRadius: '4px',
-              fontSize: '10px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px'
-            }}>
-              <Zap size={10} color="#38bdf8" />
-              <span>{tool}</span>
-            </span>
-          ))}
+          {dispatched_tools.map((tool, idx) => {
+            const isWhatsApp = tool.toLowerCase().includes('whatsapp');
+            const isSlack = tool.toLowerCase().includes('slack');
+
+            return (
+              <span 
+                key={idx} 
+                onClick={() => {
+                  if (isWhatsApp) onOpenToolModal('WHATSAPP', record);
+                  if (isSlack) onOpenToolModal('SLACK', record);
+                }}
+                className="font-mono" 
+                style={{
+                  background: isWhatsApp ? 'rgba(37, 211, 102, 0.15)' : isSlack ? 'rgba(224, 30, 90, 0.15)' : 'rgba(6, 182, 212, 0.1)',
+                  border: `1px solid ${isWhatsApp ? '#25D366' : isSlack ? '#E01E5A' : 'rgba(6, 182, 212, 0.25)'}`,
+                  color: isWhatsApp ? '#25D366' : isSlack ? '#E01E5A' : '#38bdf8',
+                  padding: '2px 7px',
+                  borderRadius: '4px',
+                  fontSize: '10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  cursor: (isWhatsApp || isSlack) ? 'pointer' : 'default'
+                }}
+              >
+                {isWhatsApp ? <MessageSquare size={11} color="#25D366" /> :
+                 isSlack ? <Share2 size={11} color="#E01E5A" /> :
+                 <Zap size={10} color="#38bdf8" />}
+                <span>{tool} {(isWhatsApp || isSlack) && '🔍'}</span>
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
