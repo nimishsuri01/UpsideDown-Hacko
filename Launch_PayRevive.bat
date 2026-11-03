@@ -10,9 +10,6 @@ echo.
 echo [*] Navigating to project directory...
 cd /d "%~dp0"
 
-echo [*] Launching background browser trigger...
-start "" powershell -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Start-Process 'http://localhost:8000'"
-
 echo [*] Starting PayRevive server and dashboard...
 echo.
 
