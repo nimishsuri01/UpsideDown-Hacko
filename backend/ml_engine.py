@@ -6,23 +6,23 @@ from .models import FailedTransactionEvent, DiagnosisResult, SHAPAttribution, Pa
 class RootCauseMLDiagnosis:
     """
     Part 1: Root-Cause Diagnosis using Gradient Boosting + TreeSHAP Feature Attribution.
-    Instantly diagnoses why a payment failed and computes recovery probability.
+    Supports UPI & Mobile payment failures along with traditional card declines.
     """
     def __init__(self):
         self._init_and_train_model()
 
     def _init_and_train_model(self):
-        # Feature columns: [decline_code_encoded, amount_scaled, retry_count, tenure_months, day_of_month, time_of_day]
         np.random.seed(42)
         n_samples = 600
 
-        # Synthetic historical training distribution representing real-world payment failures
         X = []
         y = []
 
         decline_map = {
+            PaymentDeclineCode.UPI_SERVER_TIMEOUT: 0,
             PaymentDeclineCode.PROCESSOR_TIMEOUT: 0,
             PaymentDeclineCode.NETWORK_ERROR: 1,
+            PaymentDeclineCode.UPI_MANDATE_INSUFFICIENT_FUNDS: 2,
             PaymentDeclineCode.INSUFFICIENT_FUNDS: 2,
             PaymentDeclineCode.CARD_EXPIRED: 3,
             PaymentDeclineCode.DO_NOT_HONOR: 4,
@@ -31,22 +31,21 @@ class RootCauseMLDiagnosis:
         }
 
         for _ in range(n_samples):
-            code_idx = np.random.choice([0, 1, 2, 3, 4, 5, 6], p=[0.20, 0.15, 0.35, 0.15, 0.08, 0.04, 0.03])
-            amount = np.random.uniform(10, 1000)
+            code_idx = np.random.choice([0, 1, 2, 3, 4, 5, 6], p=[0.25, 0.15, 0.30, 0.15, 0.08, 0.04, 0.03])
+            amount = np.random.uniform(50, 5000)
             retries = np.random.choice([0, 1, 2, 3, 4], p=[0.6, 0.2, 0.1, 0.06, 0.04])
             tenure = np.random.randint(1, 36)
             day = np.random.randint(1, 31)
             hour = np.random.randint(0, 24)
 
             # Ground truth recovery odds logic
-            if code_idx in [0, 1]:  # Timeout / Network
-                recovered = 1 if np.random.rand() < 0.92 else 0
+            if code_idx in [0, 1]:  # UPI / Processor Timeout
+                recovered = 1 if np.random.rand() < 0.94 else 0
             elif code_idx == 2:  # Insufficient funds
-                # Salary days (1-5 or 28-31) have higher recovery
                 is_payday = 1 if (day <= 5 or day >= 28) else 0
-                recovered = 1 if (np.random.rand() < (0.80 if is_payday else 0.38)) else 0
+                recovered = 1 if (np.random.rand() < (0.85 if is_payday else 0.38)) else 0
             elif code_idx == 3:  # Card expired
-                recovered = 1 if np.random.rand() < 0.85 else 0
+                recovered = 1 if np.random.rand() < 0.88 else 0
             elif code_idx == 6:  # Lost or stolen
                 recovered = 0
             else:
@@ -66,12 +65,15 @@ class RootCauseMLDiagnosis:
         prob = float(self.model.predict_proba(feats)[0][1])
 
         # Category determination
-        if tx.decline_code in [PaymentDeclineCode.PROCESSOR_TIMEOUT, PaymentDeclineCode.NETWORK_ERROR]:
+        if tx.decline_code == PaymentDeclineCode.UPI_SERVER_TIMEOUT:
+            category = "TRANSIENT"
+            root_cause = f"NPCI / {tx.issuing_bank} UPI server busy (>6000ms timeout). High recovery via backup VPA handle."
+        elif tx.decline_code in [PaymentDeclineCode.PROCESSOR_TIMEOUT, PaymentDeclineCode.NETWORK_ERROR]:
             category = "TRANSIENT"
             root_cause = f"Upstream processor network drop at {tx.issuing_bank} gateway. Transaction integrity preserved."
-        elif tx.decline_code == PaymentDeclineCode.INSUFFICIENT_FUNDS:
+        elif tx.decline_code in [PaymentDeclineCode.UPI_MANDATE_INSUFFICIENT_FUNDS, PaymentDeclineCode.INSUFFICIENT_FUNDS]:
             category = "SOFT_RETRYABLE"
-            root_cause = f"Balance liquidity shortfall. High probability of recovery on salary/deposit dates."
+            root_cause = f"UPI AutoPay / Balance liquidity shortfall. High recovery probability on payroll dates."
         elif tx.decline_code == PaymentDeclineCode.CARD_EXPIRED:
             category = "SOFT_RETRYABLE"
             root_cause = f"Card lifecycle expiration. Issuer credentials obsolete; account tokenization active."
@@ -83,7 +85,6 @@ class RootCauseMLDiagnosis:
             category = "CUSTOMER_ACTIONABLE"
             root_cause = f"Issuing bank {tx.issuing_bank} returned generic '{tx.decline_message}'."
 
-        # Compute SHAP-style feature attributions
         attributions = self._compute_shap_attributions(tx, prob)
 
         return DiagnosisResult(
@@ -97,13 +98,12 @@ class RootCauseMLDiagnosis:
     def _compute_shap_attributions(self, tx: FailedTransactionEvent, prob: float) -> List[SHAPAttribution]:
         attrs = []
 
-        # Decline code impact
-        if tx.decline_code in [PaymentDeclineCode.PROCESSOR_TIMEOUT, PaymentDeclineCode.NETWORK_ERROR]:
-            attrs.append(SHAPAttribution(feature="decline_code", shap_value=+0.42, description="Transient network timeouts have 90%+ recovery rate via gateway swap."))
+        if tx.decline_code in [PaymentDeclineCode.UPI_SERVER_TIMEOUT, PaymentDeclineCode.PROCESSOR_TIMEOUT]:
+            attrs.append(SHAPAttribution(feature="decline_code", shap_value=+0.46, description="Transient UPI/Bank timeout has 94%+ recovery odds via instant backup route."))
         elif tx.decline_code == PaymentDeclineCode.LOST_OR_STOLEN:
             attrs.append(SHAPAttribution(feature="decline_code", shap_value=-0.75, description="Stolen card status reduces recovery chance to zero."))
-        elif tx.decline_code == PaymentDeclineCode.INSUFFICIENT_FUNDS:
-            attrs.append(SHAPAttribution(feature="decline_code", shap_value=+0.15, description="Insufficient funds is recoverable if retried on payroll dates."))
+        elif tx.decline_code in [PaymentDeclineCode.UPI_MANDATE_INSUFFICIENT_FUNDS, PaymentDeclineCode.INSUFFICIENT_FUNDS]:
+            attrs.append(SHAPAttribution(feature="decline_code", shap_value=+0.18, description="UPI AutoPay shortfall is recoverable when aligned with salary cycle."))
 
         # Day of month impact
         if tx.day_of_month <= 5 or tx.day_of_month >= 28:
@@ -111,13 +111,11 @@ class RootCauseMLDiagnosis:
         else:
             attrs.append(SHAPAttribution(feature="day_of_month", shap_value=-0.14, description=f"Mid-month timing (Day {tx.day_of_month}) exhibits lower liquid account balances."))
 
-        # Customer tenure impact
         if tx.customer_tenure_months > 12:
-            attrs.append(SHAPAttribution(feature="customer_tenure", shap_value=+0.18, description=f"Long tenure ({tx.customer_tenure_months} mo) indicates loyal customer; high intent to maintain subscription."))
+            attrs.append(SHAPAttribution(feature="customer_tenure", shap_value=+0.18, description=f"Long tenure ({tx.customer_tenure_months} mo) indicates loyal customer; high intent."))
         else:
             attrs.append(SHAPAttribution(feature="customer_tenure", shap_value=-0.08, description="Early-stage customer profile; higher churn risk."))
 
-        # Prior retry penalty
         if tx.retry_count >= 2:
             attrs.append(SHAPAttribution(feature="retry_count", shap_value=-0.22, description=f"{tx.retry_count} prior attempts fatigue issuer authorization buffers."))
 

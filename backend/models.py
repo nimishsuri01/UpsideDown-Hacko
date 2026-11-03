@@ -5,6 +5,8 @@ import time
 import uuid
 
 class PaymentDeclineCode(str, Enum):
+    UPI_SERVER_TIMEOUT = "upi_server_timeout"
+    UPI_MANDATE_INSUFFICIENT_FUNDS = "upi_mandate_insufficient_funds"
     INSUFFICIENT_FUNDS = "insufficient_funds"
     PROCESSOR_TIMEOUT = "processor_timeout"
     CARD_EXPIRED = "card_expired"
@@ -13,10 +15,16 @@ class PaymentDeclineCode(str, Enum):
     NETWORK_ERROR = "network_error"
     INVALID_CVV = "invalid_cvv"
 
+class PaymentMethod(str, Enum):
+    UPI = "UPI (GPay / PhonePe / Paytm)"
+    CARD = "Card (RuPay / Visa / Master)"
+    NETBANKING = "Netbanking"
+
 class CardNetwork(str, Enum):
+    UPI_NPCI = "UPI / NPCI"
+    RUPAY = "RUPAY"
     VISA = "VISA"
     MASTERCARD = "MASTERCARD"
-    RUPAY = "RUPAY"
     AMEX = "AMEX"
 
 class FailedTransactionEvent(BaseModel):
@@ -24,7 +32,8 @@ class FailedTransactionEvent(BaseModel):
     timestamp: float = Field(default_factory=time.time)
     customer_id: str = Field(default_factory=lambda: f"cus_{uuid.uuid4().hex[:6]}")
     amount: float
-    currency: str = "USD"
+    currency: str = "INR"
+    payment_method: PaymentMethod = PaymentMethod.UPI
     decline_code: PaymentDeclineCode
     decline_message: str
     issuing_bank: str
@@ -89,3 +98,5 @@ class RecoveryAuditRecord(BaseModel):
     recovered_amount_usd: float = 0.0
     processing_fee_saved_usd: float = 0.0
     latency_ms: float = 0.0
+    dispatched_tools: List[str] = Field(default_factory=list)
+    hitl_status: str = "AUTO_EXECUTED"  # AUTO_EXECUTED, PENDING_APPROVAL, OVERRIDDEN

@@ -71,3 +71,4 @@ Opens the live dashboard at **`http://localhost:8000`**.
    * **Trigger 5 (16-Day Limit Breach - $140.00):** Watch the Compliance Guardrail block the action, protecting the merchant from Visa/Mastercard regulatory penalties.
 3. **Show Financial Counters:**
    * Watch **Recovered Revenue** and **Fees Saved** counters update live in real-time!
+
