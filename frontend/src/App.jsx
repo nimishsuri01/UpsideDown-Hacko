@@ -1,3 +1,4 @@
+import QRCodeView from './QRCodeView';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, 
@@ -38,23 +39,27 @@ import {
   Server,
   Globe,
   RotateCw,
-  RefreshCw,
-  Flame
+  Sliders,
+  Filter,
+  FileText,
+  Lock,
+  ChevronDown,
+  Workflow
 } from 'lucide-react';
 
-const API_BASE = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000';
-const WS_URL = typeof window !== 'undefined' ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws` : 'ws://localhost:8000/ws';
+const isDevServer = typeof window !== 'undefined' && (window.location.port === '5173' || window.location.port === '3000');
+const backendHost = isDevServer ? `${window.location.hostname}:8000` : (typeof window !== 'undefined' ? window.location.host : 'localhost:8000');
+const API_BASE = typeof window !== 'undefined' ? (isDevServer ? `${window.location.protocol}//${backendHost}` : window.location.origin) : 'http://localhost:8000';
+const WS_URL = typeof window !== 'undefined' ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${backendHost}/ws` : 'ws://localhost:8000/ws';
 
 // Synthetic Multi-Sensory Feedback (Audio Chime + Physical Phone Vibration)
 function triggerDeviceFeedback(soundEnabled = true) {
-  // 1. Physical Phone Haptic Vibration
   if (typeof navigator !== 'undefined' && navigator.vibrate) {
     try {
-      navigator.vibrate([100, 60, 180]);
+      navigator.vibrate([80, 40, 120]);
     } catch (e) {}
   }
 
-  // 2. Google-Style Cybernetic Audio Chime via Web Audio API
   if (soundEnabled) {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -63,19 +68,20 @@ function triggerDeviceFeedback(soundEnabled = true) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1); // A5
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.exponentialRampToValueAtTime(783.99, ctx.currentTime + 0.12); // G5
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.35);
+      osc.stop(ctx.currentTime + 0.3);
     } catch (e) {}
   }
 }
 
 export default function App() {
+  // Core Telemetry & Metrics
   const [metrics, setMetrics] = useState({
     total_at_risk_usd: 0.0,
     total_recovered_usd: 0.0,
@@ -89,172 +95,250 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [trafficRunning, setTrafficRunning] = useState(false);
   const [simulating, setSimulating] = useState(null);
-  const [filter, setFilter] = useState('ALL');
-  const [showCustomModal, setShowCustomModal] = useState(false);
-  const [showQRModal, setShowQRModal] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
+  const [activeTab, setActiveTab] = useState('OVERVIEW'); // 'OVERVIEW', 'RADAR', 'AI_INTELLIGENCE', 'TESTBENCH', 'COMPLIANCE'
+  const [activityFilter, setActivityFilter] = useState('ALL');
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [hitlMode, setHitlMode] = useState(false);
+  
+  // Modals & Drawers
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showFlowchartModal, setShowFlowchartModal] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [showToolModal, setShowToolModal] = useState(null); // { type: 'WHATSAPP' | 'SLACK', record: rec }
+  const [selectedRecord, setSelectedRecord] = useState(null); // For AI Intelligence inspect
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  // Active View Tab: 'RADAR' (Live Stream) vs 'UPI_APP' (Google Pay UPI Simulator)
-  const [activeTab, setActiveTab] = useState('RADAR');
-
-  // Ambient Bank & Gateway Telemetry Sensor State
+  // Bank Telemetry State
   const [bankTelemetry, setBankTelemetry] = useState({
     npci: { name: 'NPCI Central Switch', status: 'HEALTHY', latency_ms: 68, uptime_pct: 99.85, proactive_reroute_active: false },
-    hdfc: { name: 'HDFC Core UPI Node', status: 'HEALTHY', latency_ms: 92, uptime_pct: 99.7, proactive_reroute_active: false },
+    hdfc: { name: 'HDFC Core UPI Node', status: 'HEALTHY', latency_ms: 92, uptime_pct: 99.70, proactive_reroute_active: false },
     icici: { name: 'ICICI Secondary Rail', status: 'HEALTHY', latency_ms: 84, uptime_pct: 99.92, proactive_reroute_active: false },
-    razorpay: { name: 'Razorpay Gateway API', status: 'HEALTHY', latency_ms: 115, uptime_pct: 99.4, proactive_reroute_active: false }
+    paytm: { name: 'Paytm Payments Bank', status: 'HEALTHY', latency_ms: 96, uptime_pct: 99.50, proactive_reroute_active: false },
+    razorpay: { name: 'Razorpay Gateway API', status: 'HEALTHY', latency_ms: 115, uptime_pct: 99.40, proactive_reroute_active: false }
   });
 
-  // Ambient State-Change Event Narrative Banner
   const [stateChangeNarrative, setStateChangeNarrative] = useState(null);
+  const [lastNotification, setLastNotification] = useState(null);
 
-  // Interactive Google Pay / UPI Checkout State
-  const [upiAmount, setUpiAmount] = useState(499);
-  const [upiStage, setUpiStage] = useState('IDLE'); // IDLE, PROCESSING, FAILED, RECOVERING, SUCCESS
-  const [upiStageInfo, setUpiStageInfo] = useState('');
-  const [lastUpiRecord, setLastUpiRecord] = useState(null);
+  // Dynamic Mobile Network URL
+  const [mobileNetworkUrl, setMobileNetworkUrl] = useState(typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000');
 
-  // Challenge Features: Human-in-the-Loop & Override
-  const [hitlMode, setHitlMode] = useState(false);
-  const [activeOverrideId, setActiveOverrideId] = useState(null);
-
-  // Toast Alert State
-  const [toast, setToast] = useState(null);
-
-  // Tool Dispatch Preview Modal ('WHATSAPP' | 'SLACK' | null)
-  const [toolModal, setToolModal] = useState(null);
-
-  // Mobile network address (local IP)
-  const mobileNetworkUrl = typeof window !== 'undefined' ? window.location.origin : 'http://192.168.69.211:8000';
-
-  // Custom Webhook Form state
+  // Custom Webhook Builder State
   const [customForm, setCustomForm] = useState({
-    amount: 499,
+    amount: 1499,
     currency: 'INR',
     decline_code: 'upi_server_timeout',
     issuing_bank: 'HDFC Bank (UPI / PhonePe)',
     card_network: 'UPI / NPCI',
     customer_tenure_months: 14,
-    day_of_month: 2
+    day_of_month: 3,
+    retry_count: 0
   });
+  const [customResult, setCustomResult] = useState(null);
 
-  const wsRef = useRef(null);
-
+  // WebSocket Connection
   useEffect(() => {
-    let reconnectTimer;
+    let ws = null;
+    let reconnectTimeout = null;
 
-    function connect() {
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
+    const connectWs = () => {
+      try {
+        ws = new WebSocket(WS_URL);
 
-      ws.onopen = () => {
-        setConnected(true);
-      };
+        ws.onopen = () => {
+          setConnected(true);
+        };
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'INITIAL_STATE') {
-            setMetrics(data.metrics || {});
-            setAuditRecords(data.audit_records || []);
-            if (data.hitl_mode !== undefined) setHitlMode(data.hitl_mode);
-            if (data.bank_telemetry) setBankTelemetry(data.bank_telemetry);
-          } else if (data.type === 'NEW_RECOVERY_EVENT') {
-            setMetrics(data.metrics || {});
-            setAuditRecords((prev) => [data.record, ...prev]);
-            
-            // Multi-sensory alert on recovery
-            if (data.record.outcome === 'RECOVERED' || data.record.outcome === 'SCHEDULED') {
-              triggerDeviceFeedback(soundEnabled);
-              setToast({
-                title: data.record.optimization.chosen_action === 'PROACTIVE_PREEMPTIVE_FAILOVER' ? 
-                  '🛡️ Proactive Sensor Failover Succeeded' : '⚡ Autonomous Recovery Succeeded',
-                amount: data.record.recovered_amount_usd,
-                action: data.record.optimization.chosen_action,
-                tools: data.record.dispatched_tools
-              });
-              setTimeout(() => setToast(null), 4500);
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'INITIAL_STATE') {
+              if (data.metrics) setMetrics(data.metrics);
+              if (data.audit_records) {
+                setAuditRecords(data.audit_records.reverse());
+                if (data.audit_records.length > 0) setSelectedRecord(data.audit_records[0]);
+              }
+              if (data.bank_telemetry) setBankTelemetry(data.bank_telemetry);
+              if (data.hitl_mode !== undefined) setHitlMode(data.hitl_mode);
+            } else if (data.type === 'NEW_RECOVERY_EVENT' || data.type === 'MOBILE_PAYMENT_INTERCEPTED') {
+              if (data.metrics) setMetrics(data.metrics);
+              if (data.record) {
+                setAuditRecords((prev) => [data.record, ...prev.slice(0, 49)]);
+                setSelectedRecord(data.record);
+                triggerDeviceFeedback(soundEnabled);
+                setLastNotification({
+                  amount: data.record.transaction?.amount,
+                  outcome: data.record.outcome,
+                  action: data.record.optimization?.chosen_action,
+                  isMobile: data.type === 'MOBILE_PAYMENT_INTERCEPTED',
+                  appName: data.app === 'paytm' ? 'Paytm UPI' : (data.app === 'google_pay' ? 'Google Pay' : 'Mobile UPI')
+                });
+                setTimeout(() => setLastNotification(null), 5000);
+              }
+            } else if (data.type === 'TELEMETRY_HEARTBEAT') {
+              if (data.telemetry) setBankTelemetry(data.telemetry);
+            } else if (data.type === 'BANK_OUTAGE_TRIGGERED') {
+              if (data.telemetry) setBankTelemetry(data.telemetry);
+              if (data.narrative) setStateChangeNarrative(data.narrative);
+            } else if (data.type === 'RECORD_UPDATED') {
+              if (data.metrics) setMetrics(data.metrics);
+              if (data.record) {
+                setAuditRecords((prev) =>
+                  prev.map((r) => (r.id === data.record.id ? data.record : r))
+                );
+                if (selectedRecord?.id === data.record.id) setSelectedRecord(data.record);
+              }
+            } else if (data.type === 'HITL_MODE_CHANGED') {
+              setHitlMode(data.hitl_mode);
             }
-          } else if (data.type === 'BANK_STATE_CHANGE') {
-            if (data.telemetry) setBankTelemetry(data.telemetry);
-            setStateChangeNarrative(data.ai_narrative);
-            triggerDeviceFeedback(soundEnabled);
-            setTimeout(() => setStateChangeNarrative(null), 12000);
-          } else if (data.type === 'TELEMETRY_HEARTBEAT') {
-            if (data.telemetry) setBankTelemetry(data.telemetry);
-          } else if (data.type === 'RECORD_UPDATED') {
-            setMetrics(data.metrics || {});
-            setAuditRecords((prev) => prev.map(r => r.id === data.record.id ? data.record : r));
-          } else if (data.type === 'HITL_MODE_CHANGED') {
-            setHitlMode(data.hitl_mode);
+          } catch (e) {
+            console.error('WS parse error:', e);
           }
-        } catch (e) {
-          console.error('WS Error:', e);
-        }
-      };
+        };
 
-      ws.onclose = () => {
+        ws.onclose = () => {
+          setConnected(false);
+          reconnectTimeout = setTimeout(connectWs, 3000);
+        };
+
+        ws.onerror = () => {
+          ws.close();
+        };
+      } catch (err) {
         setConnected(false);
-        reconnectTimer = setTimeout(connect, 2000);
-      };
+        reconnectTimeout = setTimeout(connectWs, 3000);
+      }
+    };
 
-      ws.onerror = () => ws.close();
-    }
+    connectWs();
 
-    connect();
+    // Immediate fetch of latest state
+    const fetchFreshState = () => {
+      fetch(`${API_BASE}/api/metrics`)
+        .then((r) => r.json())
+        .then((m) => setMetrics(m))
+        .catch(() => {});
+      fetch(`${API_BASE}/api/audit?limit=40`)
+        .then((r) => r.json())
+        .then((recs) => {
+          if (Array.isArray(recs) && recs.length > 0) {
+            setAuditRecords(recs.slice().reverse());
+            setSelectedRecord(recs[recs.length - 1]);
+          }
+        })
+        .catch(() => {});
+      fetch(`${API_BASE}/api/traffic/status`)
+        .then((res) => res.json())
+        .then((d) => setTrafficRunning(d.is_running))
+        .catch(() => {});
+      fetch(`${API_BASE}/api/network/ip`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d && d.mobile_url) setMobileNetworkUrl(d.mobile_url);
+        })
+        .catch(() => {});
+    };
 
-    // Check traffic status
-    fetch(`${API_BASE}/api/traffic/status`)
-      .then(res => res.json())
-      .then(d => setTrafficRunning(d.is_running))
-      .catch(() => {});
+    fetchFreshState();
+
+    // Fallback polling every 2.2s if live stream is running or if WS is disconnected
+    const pollInterval = setInterval(() => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        fetchFreshState();
+      }
+    }, 2200);
 
     return () => {
-      clearTimeout(reconnectTimer);
-      if (wsRef.current) wsRef.current.close();
+      if (ws) ws.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      clearInterval(pollInterval);
     };
   }, [soundEnabled]);
 
-  // Toggle Ambient Bank Outage / State Change (Challenge Feature: Reacting to State Changes)
-  const toggleBankOutage = async (bankId = 'hdfc') => {
-    try {
-      const res = await fetch(`${API_BASE}/api/telemetry/toggle_outage/${bankId}`, { method: 'POST' });
-      const data = await res.json();
-      if (data.telemetry) setBankTelemetry(data.telemetry);
-      setStateChangeNarrative(data.ai_narrative);
-      triggerDeviceFeedback(soundEnabled);
-      setTimeout(() => setStateChangeNarrative(null), 9000);
-    } catch (e) {
-      console.error('Outage toggle error:', e);
-    }
-  };
-
+  // Traffic Generator Toggle with Instant Feedback
   const toggleTraffic = async () => {
-    const endpoint = trafficRunning ? '/api/traffic/stop' : '/api/traffic/start';
+    const nextState = !trafficRunning;
+    setTrafficRunning(nextState);
+    const endpoint = nextState ? '/api/traffic/start' : '/api/traffic/stop';
     try {
       const res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST' });
       const data = await res.json();
-      setTrafficRunning(data.status === 'RUNNING');
+      const isRunning = data.status === 'RUNNING';
+      setTrafficRunning(isRunning);
+      if (isRunning) {
+        setTimeout(() => {
+          fetch(`${API_BASE}/api/metrics`).then(r => r.json()).then(m => setMetrics(m)).catch(() => {});
+          fetch(`${API_BASE}/api/audit?limit=30`).then(r => r.json()).then(a => {
+            if (Array.isArray(a) && a.length > 0) {
+              setAuditRecords(a.slice().reverse());
+              setSelectedRecord(a[a.length - 1]);
+            }
+          }).catch(() => {});
+        }, 350);
+      }
     } catch (e) {
       console.error('Traffic toggle error:', e);
     }
   };
 
-  const toggleHitlMode = async () => {
-    const nextMode = !hitlMode;
+  // Toggle Human-in-the-Loop Mode
+  const toggleHitl = async () => {
+    const nextState = !hitlMode;
     try {
       await fetch(`${API_BASE}/api/config/hitl_mode`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: nextMode })
+        body: JSON.stringify({ enabled: nextState })
       });
-      setHitlMode(nextMode);
+      setHitlMode(nextState);
     } catch (e) {
       console.error('HITL toggle error:', e);
     }
   };
 
+  // Toggle Simulated Bank Outage
+  const toggleOutage = async (bankId = 'hdfc') => {
+    try {
+      const res = await fetch(`${API_BASE}/api/telemetry/toggle_outage/${bankId}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.narrative) setStateChangeNarrative(data.narrative);
+    } catch (e) {
+      console.error('Outage toggle error:', e);
+    }
+  };
+
+  // Trigger Pre-built Test Scenarios
+  const triggerSimulation = async (scenarioKey) => {
+    setSimulating(scenarioKey);
+    try {
+      const res = await fetch(`${API_BASE}/api/simulate/${scenarioKey}`, { method: 'POST' });
+      const record = await res.json();
+      setSelectedRecord(record);
+    } catch (e) {
+      console.error('Simulation error:', e);
+    } finally {
+      setTimeout(() => setSimulating(null), 800);
+    }
+  };
+
+  // Submit Custom Webhook
+  const submitCustomWebhook = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${API_BASE}/api/webhook/custom`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(customForm)
+      });
+      const data = await res.json();
+      setCustomResult(data);
+      setSelectedRecord(data);
+    } catch (err) {
+      console.error('Custom webhook error:', err);
+    }
+  };
+
+  // Manual Operator Override
   const overrideAction = async (recordId, newAction) => {
     try {
       await fetch(`${API_BASE}/api/audit/${recordId}/override`, {
@@ -262,1135 +346,519 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: newAction })
       });
-      setActiveOverrideId(null);
     } catch (e) {
       console.error('Override error:', e);
     }
   };
 
-  const triggerSimulation = async (scenario) => {
-    setSimulating(scenario);
-    try {
-      await fetch(`${API_BASE}/api/simulate/${scenario}`, { method: 'POST' });
-    } catch (e) {
-      console.error('Sim error:', e);
-    } finally {
-      setTimeout(() => setSimulating(null), 500);
-    }
+  // Export CSV
+  const handleExportCsv = () => {
+    window.open(`${API_BASE}/api/audit/csv`, '_blank');
   };
 
-  // Google Pay Mobile UPI Simulation
-  const runMobileUpiTest = async (scenarioType) => {
-    setUpiStage('PROCESSING');
-    setUpiStageInfo('Initiating NPCI UPI Handshake via HDFC Bank Rail...');
-
-    setTimeout(async () => {
-      // If HDFC is currently in outage, show proactive preemption!
-      if (bankTelemetry.hdfc?.proactive_reroute_active) {
-        setUpiStage('RECOVERING');
-        setUpiStageInfo('⚡ Sensor Warning: HDFC Core in Outage! Preemptively auto-routing to ICICI...');
-
-        try {
-          const res = await fetch(`${API_BASE}/api/simulate/upi_timeout`, { method: 'POST' });
-          const rec = await res.json();
-          setLastUpiRecord(rec);
-          triggerDeviceFeedback(soundEnabled);
-          setUpiStage('SUCCESS');
-          setUpiStageInfo('🛡️ Proactive Failover Complete! Direct routing to ICICI Secondary Rail in 14ms (Zero customer drop).');
-        } catch (e) {
-          setUpiStage('IDLE');
-        }
-        return;
-      }
-
-      if (scenarioType === 'TIMEOUT') {
-        setUpiStage('FAILED');
-        setUpiStageInfo('Decline U30: HDFC UPI Core Server Timeout (>2400ms)');
-        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-
-        setTimeout(async () => {
-          setUpiStage('RECOVERING');
-          setUpiStageInfo('PayRevive Ambient Sentinel Intercepting failure event...');
-
-          try {
-            const res = await fetch(`${API_BASE}/api/simulate/upi_timeout`, { method: 'POST' });
-            const rec = await res.json();
-            setLastUpiRecord(rec);
-            triggerDeviceFeedback(soundEnabled);
-            setUpiStage('SUCCESS');
-            setUpiStageInfo('Payment Autonomous Recovered! Switched to ICICI Secondary Rail in 41ms.');
-          } catch (e) {
-            setUpiStage('IDLE');
-          }
-        }, 1200);
-
-      } else if (scenarioType === 'MANDATE') {
-        setUpiStage('FAILED');
-        setUpiStageInfo('Decline M05: UPI AutoPay Mandate Failed - Insufficient Balance');
-        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-
-        setTimeout(async () => {
-          setUpiStage('RECOVERING');
-          setUpiStageInfo('PayRevive TreeSHAP Diagnosing & Scheduling Payday Retry...');
-
-          try {
-            const res = await fetch(`${API_BASE}/api/simulate/upi_mandate`, { method: 'POST' });
-            const rec = await res.json();
-            setLastUpiRecord(rec);
-            triggerDeviceFeedback(soundEnabled);
-            setUpiStage('SUCCESS');
-            setUpiStageInfo('AutoPay Mandate Preserved! Scheduled retry for salary day (+1) + WhatsApp alert dispatched.');
-          } catch (e) {
-            setUpiStage('IDLE');
-          }
-        }, 1200);
-      }
-    }, 1000);
+  // Open Architecture Flowchart Modal
+  const handleOpenFlowchart = () => {
+    setShowFlowchartModal(true);
   };
 
-  const submitCustomWebhook = async (e) => {
-    e.preventDefault();
-    try {
-      await fetch(`${API_BASE}/api/webhook/custom`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(customForm)
-      });
-      setShowCustomModal(false);
-    } catch (e) {
-      console.error('Custom webhook error:', e);
-    }
-  };
-
-  const copyMobileUrl = () => {
-    navigator.clipboard.writeText(mobileNetworkUrl);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
-
+  // Filtered decisions for Timeline
   const filteredRecords = auditRecords.filter((rec) => {
-    if (filter === 'RECOVERED') return rec.outcome === 'RECOVERED' || rec.outcome === 'SCHEDULED';
-    if (filter === 'BLOCKED') return rec.outcome === 'COMPLIANCE_BLOCKED';
-    if (filter === 'ABANDONED') return rec.outcome === 'ABANDONED_FEES_SAVED';
+    if (activityFilter === 'ALL') return true;
+    if (activityFilter === 'RECOVERED') return rec.outcome === 'RECOVERED';
+    if (activityFilter === 'BLOCKED') return rec.outcome === 'COMPLIANCE_BLOCKED' || rec.outcome === 'ABANDONED_FEES_SAVED';
+    if (activityFilter === 'SCHEDULED') return rec.outcome === 'SCHEDULED';
     return true;
   });
 
-  const isHdfcOutage = bankTelemetry.hdfc?.status === 'CRITICAL_OUTAGE' || bankTelemetry.hdfc?.proactive_reroute_active;
+  const isHdfcOutage = bankTelemetry?.hdfc?.status === 'CRITICAL_OUTAGE';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--g-bg-base)', paddingBottom: '76px' }}>
-      
-      {/* Top Header Bar (Google Material 3 Style) */}
-      <header style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '12px 24px',
-        background: 'rgba(30, 31, 32, 0.85)',
-        borderBottom: '1px solid var(--g-border)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        backdropFilter: 'blur(16px)',
-        flexWrap: 'wrap',
-        gap: '12px'
-      }}>
-        {/* Brand & Badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '12px',
-            background: 'var(--g-gemini-gradient)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 0 20px var(--g-gemini-glow)'
-          }}>
-            <Sparkles size={20} color="#ffffff" />
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* 1. Header */}
+      <header
+        style={{
+          background: '#FFFFFF',
+          borderBottom: '1px solid var(--border-color)',
+          position: 'sticky',
+          top: 0,
+          zIndex: 40
+        }}
+      >
+        <div className="header-container">
+          {/* Logo & Identity */}
+          <div className="header-brand-row">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '8px',
+                  background: 'var(--color-blue)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#FFFFFF'
+                }}
+              >
+                <Zap size={18} strokeWidth={2.5} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+                    PayRevive
+                  </span>
+                  <span className="badge badge-neutral" style={{ fontSize: '10px', padding: '1px 5px' }}>
+                    v2.0
+                  </span>
+                </div>
+                <p style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  Autonomous Revenue Recovery Engine
+                </p>
+              </div>
+            </div>
+
+            {/* Mobile-only status pill */}
+            <div
+              className="pulse-dot"
+              style={{
+                display: 'none',
+                background: connected ? 'var(--color-green)' : 'var(--color-warning)'
+              }}
+            />
           </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.3px', margin: 0, color: '#f8fafc' }}>
-                PayRevive
-              </h1>
-              <span style={{
-                background: 'rgba(66, 133, 244, 0.14)',
-                border: '1px solid rgba(138, 180, 248, 0.3)',
-                fontSize: '11px',
-                fontWeight: 600,
-                padding: '2px 8px',
-                borderRadius: '9999px',
-                color: 'var(--g-blue)',
+
+          {/* Nav Tabs */}
+          <nav className="header-nav-scroll">
+            {[
+              { id: 'OVERVIEW', label: 'Overview', icon: Layers },
+              { id: 'RADAR', label: 'Live Radar', icon: Radio },
+              { id: 'AI_INTELLIGENCE', label: 'AI Intelligence', icon: Cpu },
+              { id: 'TESTBENCH', label: 'Testbench', icon: Sliders },
+              { id: 'COMPLIANCE', label: 'Compliance Center', icon: ShieldCheck }
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`nav-tab ${isActive ? 'active' : ''}`}
+                >
+                  <Icon size={15} color={isActive ? 'var(--color-blue)' : 'var(--text-secondary)'} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Right Action Controls */}
+          <div className="header-actions-row">
+            {/* Live Status indicator */}
+            <div
+              style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px'
-              }}>
-                <Zap size={11} color="var(--g-blue)" />
-                PS-02 : Zero-Prompt AI
-              </span>
+                gap: '6px',
+                padding: '6px 10px',
+                background: connected ? 'var(--color-green-light)' : 'var(--color-warning-light)',
+                border: `1px solid ${connected ? 'var(--color-green-border)' : 'var(--color-warning-border)'}`,
+                borderRadius: 'var(--radius-pill)',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: connected ? 'var(--color-green)' : 'var(--color-warning)'
+              }}
+            >
+              <div className={connected ? 'pulse-dot' : ''} style={{ background: connected ? 'var(--color-green)' : 'var(--color-warning)', width: '7px', height: '7px', borderRadius: '50%' }} />
+              <span className="font-mono">{connected ? 'Live Sync' : 'Reconnecting'}</span>
             </div>
-            <p style={{ margin: 0, fontSize: '11px', color: 'var(--g-text-secondary)', marginTop: '2px' }}>
-              Autonomous Revenue Recovery • Google Cloud & NPCI Multi-Rail Sentinel
-            </p>
-          </div>
-        </div>
 
-        {/* Ambient Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          {/* Sound Toggle */}
-          <button
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className="g-button"
-            title={soundEnabled ? "Mute audio chimes" : "Enable audio chimes"}
-            style={{
-              background: 'var(--g-surface-2)',
-              border: '1px solid var(--g-border)',
-              color: soundEnabled ? 'var(--g-green)' : 'var(--g-text-tertiary)',
-              width: '34px',
-              height: '34px',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer'
-            }}
-          >
-            {soundEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
-          </button>
+            {/* Architecture Flowchart Button */}
+            <button
+              onClick={handleOpenFlowchart}
+              className="btn-secondary"
+              style={{ padding: '6px 10px', fontSize: '12px' }}
+              title="Open Interactive Architecture & Decision Flowchart"
+            >
+              <Workflow size={14} color="var(--color-blue)" />
+              <span>Flowchart</span>
+            </button>
 
-          {/* HITL Control Switch */}
-          <button
-            onClick={toggleHitlMode}
-            className="g-button"
-            title="Toggle between 100% Autonomous AI and Supervised Human-in-the-Loop Mode"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: hitlMode ? 'var(--g-yellow-container)' : 'var(--g-green-container)',
-              border: `1px solid ${hitlMode ? 'rgba(253, 214, 99, 0.4)' : 'rgba(129, 201, 149, 0.4)'}`,
-              color: hitlMode ? 'var(--g-yellow)' : 'var(--g-green)',
-              padding: '6px 14px',
-              borderRadius: '9999px',
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: '11px'
-            }}
-          >
-            {hitlMode ? <UserCheck size={14} /> : <ShieldCheck size={14} />}
-            <span>{hitlMode ? 'Supervised Mode' : '100% Autonomous'}</span>
-          </button>
+            {/* Pitch Deck Presentation Button */}
+            <a
+              href="/slides"
+              target="_blank"
+              rel="noreferrer"
+              className="btn-secondary"
+              style={{ padding: '6px 10px', fontSize: '12px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              title="Open Executive Pitch Deck Presentation"
+            >
+              <FileText size={14} color="var(--color-primary)" />
+              <span>Pitch Deck</span>
+            </a>
 
-          {/* QR Code */}
-          <button
-            onClick={() => setShowQRModal(true)}
-            className="g-button"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: 'var(--g-blue-container)',
-              border: '1px solid rgba(138, 180, 248, 0.3)',
-              color: 'var(--g-blue)',
-              padding: '6px 14px',
-              borderRadius: '9999px',
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: '11px'
-            }}
-          >
-            <Smartphone size={14} />
-            <span>Open on Phone</span>
-          </button>
+            {/* Mobile QR Sentinel Button */}
+            <button
+              onClick={() => setShowQrModal(true)}
+              className="btn-secondary"
+              style={{ padding: '6px 10px', fontSize: '12px' }}
+              title="Scan QR Code to open Mobile UPI Sentinel on smartphone"
+            >
+              <Smartphone size={14} color="var(--color-blue)" />
+              <span>Mobile QR</span>
+            </button>
 
-          {/* Continuous Traffic */}
-          <button
-            onClick={toggleTraffic}
-            className="g-button"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: trafficRunning ? 'var(--g-red-container)' : 'var(--g-surface-2)',
-              border: `1px solid ${trafficRunning ? 'rgba(242, 139, 130, 0.4)' : 'var(--g-border)'}`,
-              color: trafficRunning ? 'var(--g-red)' : 'var(--g-text-primary)',
-              padding: '6px 14px',
-              borderRadius: '9999px',
-              cursor: 'pointer',
-              fontWeight: 600,
-              fontSize: '11px'
-            }}
-          >
-            {trafficRunning ? <Square size={13} fill="var(--g-red)" /> : <Play size={13} fill="var(--g-green)" />}
-            <span>{trafficRunning ? 'Stop Stream' : 'Live Stream'}</span>
-          </button>
+            {/* Continuous Live Stream Toggle */}
+            <button
+              onClick={toggleTraffic}
+              className="btn-secondary"
+              style={{
+                padding: '6px 12px',
+                fontSize: '12px',
+                background: trafficRunning ? 'var(--color-green-light)' : '#FFFFFF',
+                borderColor: trafficRunning ? 'var(--color-green-border)' : 'var(--border-color)',
+                color: trafficRunning ? 'var(--color-green)' : 'var(--text-primary)',
+                fontWeight: trafficRunning ? 600 : 500
+              }}
+              title={trafficRunning ? 'Click to pause simulated live payment stream' : 'Click to start simulated live payment stream'}
+            >
+              {trafficRunning ? (
+                <>
+                  <div className="pulse-dot" style={{ width: '8px', height: '8px', background: 'var(--color-green)', borderRadius: '50%' }} />
+                  <span>Live Stream On</span>
+                </>
+              ) : (
+                <>
+                  <Play size={13} fill="currentColor" />
+                  <span>Live Stream</span>
+                </>
+              )}
+            </button>
 
-          {/* WebSocket Status Indicator */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '11px',
-            color: connected ? 'var(--g-green)' : 'var(--g-red)',
-            padding: '5px 10px',
-            background: 'var(--g-surface-2)',
-            borderRadius: '9999px',
-            border: '1px solid var(--g-border)'
-          }}>
-            <span style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: connected ? 'var(--g-green)' : 'var(--g-red)',
-              boxShadow: connected ? '0 0 8px var(--g-green)' : 'none'
-            }} />
-            <span className="font-mono">{connected ? 'ONLINE' : 'CONNECTING'}</span>
+            {/* Settings Button */}
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="btn-secondary"
+              style={{ padding: '6px 10px' }}
+              title="System Configuration & Settings"
+            >
+              <Settings size={16} />
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Floating Google-Style Toast Notification on Recovery */}
-      {toast && (
-        <div style={{
-          position: 'fixed',
-          top: '72px',
-          right: '20px',
-          zIndex: 999,
-          background: 'var(--g-surface-2)',
-          border: '1px solid rgba(129, 201, 149, 0.5)',
-          boxShadow: '0 12px 36px rgba(0, 0, 0, 0.5)',
-          borderRadius: '14px',
-          padding: '12px 18px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          maxWidth: '380px',
-          animation: 'slideDownToast 0.25s cubic-bezier(0.2, 0, 0, 1)'
-        }}>
-          <div style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            background: 'var(--g-green-container)',
+      {/* State Change Notification Banner */}
+      {isHdfcOutage && (
+        <div
+          style={{
+            background: 'var(--color-warning-light)',
+            borderBottom: '1px solid var(--color-warning-border)',
+            padding: '10px 20px',
+            fontSize: '13px',
+            color: '#92400E',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0
-          }}>
-            <CheckCircle2 size={18} color="var(--g-green)" />
+            justifyContent: 'space-between',
+            gap: '12px'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertTriangle size={16} color="var(--color-warning)" />
+            <span>
+              <b>Live Sentinel Telemetry Alert:</b> HDFC Core UPI Node is experiencing critical latency spikes (2450ms). Preemptive failover automatically routes UPI traffic to ICICI Secondary Rail.
+            </span>
           </div>
-          <div>
-            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--g-green)' }}>{toast.title}</div>
-            <div style={{ fontSize: '11px', color: 'var(--g-text-secondary)', marginTop: '2px' }}>
-              Recovered <b style={{ color: '#fff' }}>₹{toast.amount}</b> via {toast.action}
-            </div>
-          </div>
-          <button onClick={() => setToast(null)} style={{ background: 'transparent', border: 'none', color: 'var(--g-text-tertiary)', cursor: 'pointer', marginLeft: 'auto' }}>
-            <X size={15} />
+          <button
+            onClick={() => toggleOutage('hdfc')}
+            className="btn-secondary"
+            style={{ padding: '4px 10px', fontSize: '11px', background: '#FFFFFF' }}
+          >
+            Resolve Outage
           </button>
         </div>
       )}
 
-      {/* Main Content Area */}
-      <main style={{ flex: 1, padding: '16px 24px', maxWidth: '1440px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+      {/* Main Body Content */}
+      <main style={{ flex: 1, maxWidth: '1280px', margin: '0 auto', width: '100%', padding: '24px 20px' }}>
         
-        {/* DEDICATED AMBIENT BANK & GATEWAY HEALTH SENTINEL (REACTS TO STATE CHANGES & SENSOR TELEMETRY) */}
-        <div style={{
-          background: isHdfcOutage ? 'linear-gradient(180deg, rgba(242, 139, 130, 0.12) 0%, var(--g-surface-1) 100%)' : 'var(--g-surface-1)',
-          border: `1px solid ${isHdfcOutage ? 'rgba(242, 139, 130, 0.5)' : 'var(--g-border)'}`,
-          borderRadius: '20px',
-          padding: '18px 22px',
-          marginBottom: '20px',
-          boxShadow: isHdfcOutage ? '0 8px 32px rgba(242, 139, 130, 0.15)' : '0 4px 20px rgba(0, 0, 0, 0.25)'
-        }}>
-          {/* Header Row */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '50%',
-                background: isHdfcOutage ? 'var(--g-red-container)' : 'var(--g-blue-container)',
+        {/* ============================================================== */}
+        {/* TAB 1: OVERVIEW (Main Dashboard) */}
+        {/* ============================================================== */}
+        {activeTab === 'OVERVIEW' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* 2B. Welcome Section */}
+            <div
+              className="welcome-card-inner"
+              style={{
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: `1px solid ${isHdfcOutage ? 'rgba(242, 139, 130, 0.5)' : 'rgba(138, 180, 248, 0.4)'}`
-              }}>
-                <Radio size={18} color={isHdfcOutage ? 'var(--g-red)' : 'var(--g-blue)'} className="pulse-indicator" />
-              </div>
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '16px',
+                background: '#FFFFFF',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-card)',
+                padding: '16px 20px',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#f8fafc', letterSpacing: '0.3px' }}>
-                    AMBIENT BANK & GATEWAY HEALTH SENTINEL
-                  </span>
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    background: 'var(--g-surface-2)',
-                    color: 'var(--g-green)',
-                    border: '1px solid rgba(129, 201, 149, 0.3)',
-                    padding: '1px 7px',
-                    borderRadius: '9999px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}>
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--g-green)' }}></span>
-                    LIVE POLLING (3.2s)
-                  </span>
-                </div>
-                <div style={{ fontSize: '11px', color: 'var(--g-text-secondary)', marginTop: '2px' }}>
-                  Zero-Prompt background sensor monitoring NPCI switch & core banking latency SLA thresholds (&gt;1200ms)
-                </div>
+                <h1 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  Your Revenue Recovery Overview
+                </h1>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '720px' }}>
+                  PayRevive monitors incoming payment webhooks ambiently, diagnoses root causes via Gradient Boosting, and executes optimal recovery routes without requiring human prompts or chatboxes.
+                </p>
               </div>
-            </div>
 
-            {/* Active Routing Cache Indicator */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: isHdfcOutage ? 'var(--g-red-container)' : 'var(--g-surface-2)',
-              border: `1px solid ${isHdfcOutage ? 'var(--g-red)' : 'var(--g-border)'}`,
-              padding: '6px 14px',
-              borderRadius: '9999px',
-              fontSize: '11px'
-            }}>
-              <span style={{ color: 'var(--g-text-secondary)', fontWeight: 500 }}>Active Route:</span>
-              <span style={{ color: isHdfcOutage ? 'var(--g-red)' : 'var(--g-green)', fontWeight: 800 }}>
-                {isHdfcOutage ? '⚡ ICICI SECONDARY RAIL (PROACTIVELY FAILOVERED)' : '🟢 HDFC PRIMARY UPI RAIL (OPTIMAL)'}
-              </span>
-            </div>
-          </div>
-
-          {/* Telemetry Node Cards Grid */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-            gap: '12px',
-            marginBottom: '16px'
-          }}>
-            {/* 1. NPCI Central Switch */}
-            <div style={{
-              background: 'var(--g-surface-2)',
-              border: `1px solid ${bankTelemetry.npci?.status === 'CRITICAL_OUTAGE' ? 'var(--g-red)' : 'var(--g-border)'}`,
-              borderRadius: '14px',
-              padding: '12px 14px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Globe size={13} color="var(--g-blue)" />
-                  NPCI Central Switch
-                </span>
-                <span style={{
-                  fontSize: '9px',
-                  fontWeight: 700,
-                  color: bankTelemetry.npci?.status === 'CRITICAL_OUTAGE' ? 'var(--g-red)' : 'var(--g-green)',
-                  background: bankTelemetry.npci?.status === 'CRITICAL_OUTAGE' ? 'var(--g-red-container)' : 'var(--g-green-container)',
-                  padding: '1px 6px',
-                  borderRadius: '9999px'
-                }}>
-                  {bankTelemetry.npci?.status === 'CRITICAL_OUTAGE' ? 'CONGESTED' : 'OPTIMAL'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <div style={{ fontSize: '18px', fontWeight: 800, color: bankTelemetry.npci?.status === 'CRITICAL_OUTAGE' ? 'var(--g-red)' : '#f8fafc' }}>
-                  {bankTelemetry.npci?.latency_ms || 68} <span style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>ms ping</span>
-                </div>
-                <div style={{ fontSize: '10px', color: 'var(--g-text-secondary)' }}>
-                  Uptime: <b style={{ color: 'var(--g-green)' }}>{bankTelemetry.npci?.uptime_pct}%</b>
-                </div>
-              </div>
-              <button
-                onClick={() => toggleBankOutage('npci')}
-                style={{
-                  marginTop: '10px',
-                  width: '100%',
-                  background: 'transparent',
-                  border: '1px dashed var(--g-border)',
-                  color: 'var(--g-text-secondary)',
-                  borderRadius: '8px',
-                  padding: '4px',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                {bankTelemetry.npci?.status === 'CRITICAL_OUTAGE' ? '✓ Restore NPCI' : '⚡ Simulate NPCI Surge'}
-              </button>
-            </div>
-
-            {/* 2. HDFC Core UPI Node (The Main Star for Judges) */}
-            <div style={{
-              background: isHdfcOutage ? 'rgba(242, 139, 130, 0.15)' : 'var(--g-surface-2)',
-              border: `2px solid ${isHdfcOutage ? 'var(--g-red)' : 'rgba(138, 180, 248, 0.3)'}`,
-              borderRadius: '14px',
-              padding: '12px 14px',
-              boxShadow: isHdfcOutage ? '0 0 16px rgba(242, 139, 130, 0.25)' : 'none'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: isHdfcOutage ? 'var(--g-red)' : '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Server size={13} color={isHdfcOutage ? 'var(--g-red)' : 'var(--g-blue)'} />
-                  HDFC Core UPI Node
-                </span>
-                <span style={{
-                  fontSize: '9px',
-                  fontWeight: 800,
-                  color: isHdfcOutage ? '#fff' : 'var(--g-green)',
-                  background: isHdfcOutage ? 'var(--g-red)' : 'var(--g-green-container)',
-                  padding: '2px 8px',
-                  borderRadius: '9999px',
-                  animation: isHdfcOutage ? 'pulse 1.5s infinite' : 'none'
-                }}>
-                  {isHdfcOutage ? 'CRITICAL OUTAGE' : 'HEALTHY'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <div style={{ fontSize: '18px', fontWeight: 900, color: isHdfcOutage ? 'var(--g-red)' : '#f8fafc' }}>
-                  {bankTelemetry.hdfc?.latency_ms || 92} <span style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>ms {isHdfcOutage ? '(>1200ms SLA!)' : 'ping'}</span>
-                </div>
-                <div style={{ fontSize: '10px', color: isHdfcOutage ? 'var(--g-red)' : 'var(--g-text-secondary)', fontWeight: 600 }}>
-                  {isHdfcOutage ? '48.6% Failure Rate' : '0.3% Optimal'}
-                </div>
-              </div>
-              <button
-                onClick={() => toggleBankOutage('hdfc')}
-                className="g-button"
-                style={{
-                  marginTop: '10px',
-                  width: '100%',
-                  background: isHdfcOutage ? 'var(--g-green)' : 'rgba(242, 139, 130, 0.22)',
-                  color: isHdfcOutage ? '#041e49' : 'var(--g-red)',
-                  border: `1px solid ${isHdfcOutage ? 'transparent' : 'var(--g-red)'}`,
-                  borderRadius: '8px',
-                  padding: '5px',
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px'
-                }}
-              >
-                {isHdfcOutage ? (
-                  <>
-                    <RefreshCw size={13} />
-                    <span>✓ Restore HDFC Health (88ms)</span>
-                  </>
-                ) : (
-                  <>
-                    <Flame size={13} />
-                    <span>⚡ Simulate HDFC Outage (2450ms)</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* 3. ICICI Secondary Rail (The Failover Target) */}
-            <div style={{
-              background: isHdfcOutage ? 'rgba(129, 201, 149, 0.15)' : 'var(--g-surface-2)',
-              border: `2px solid ${isHdfcOutage ? 'var(--g-green)' : 'var(--g-border)'}`,
-              borderRadius: '14px',
-              padding: '12px 14px',
-              boxShadow: isHdfcOutage ? '0 0 16px rgba(129, 201, 149, 0.25)' : 'none'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: isHdfcOutage ? 'var(--g-green)' : '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Zap size={13} color={isHdfcOutage ? 'var(--g-green)' : 'var(--g-text-secondary)'} />
-                  ICICI Secondary Rail
-                </span>
-                <span style={{
-                  fontSize: '9px',
-                  fontWeight: 800,
-                  color: isHdfcOutage ? '#041e49' : 'var(--g-text-secondary)',
-                  background: isHdfcOutage ? 'var(--g-green)' : 'var(--g-surface-3)',
-                  padding: '2px 8px',
-                  borderRadius: '9999px'
-                }}>
-                  {isHdfcOutage ? '⚡ ACTIVE FAILOVER' : 'HOT STANDBY'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <div style={{ fontSize: '18px', fontWeight: 800, color: isHdfcOutage ? 'var(--g-green)' : '#f8fafc' }}>
-                  {bankTelemetry.icici?.latency_ms || 84} <span style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>ms ping</span>
-                </div>
-                <div style={{ fontSize: '10px', color: isHdfcOutage ? 'var(--g-green)' : 'var(--g-text-secondary)', fontWeight: 600 }}>
-                  {isHdfcOutage ? '100% Traffic Load' : '99.92% Uptime'}
-                </div>
-              </div>
-              <div style={{
-                marginTop: '10px',
-                fontSize: '10px',
-                color: isHdfcOutage ? 'var(--g-green)' : 'var(--g-text-tertiary)',
-                textAlign: 'center',
-                padding: '4px',
-                background: isHdfcOutage ? 'rgba(129, 201, 149, 0.2)' : 'transparent',
-                borderRadius: '8px',
-                fontWeight: 600
-              }}>
-                {isHdfcOutage ? '🛡️ ZERO-DOWNTIME ACTIVE' : 'Hot-Sync Standby Rail'}
-              </div>
-            </div>
-
-            {/* 4. Razorpay Gateway API */}
-            <div style={{
-              background: 'var(--g-surface-2)',
-              border: '1px solid var(--g-border)',
-              borderRadius: '14px',
-              padding: '12px 14px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <ShieldCheck size={13} color="var(--g-blue)" />
-                  Razorpay Gateway API
-                </span>
-                <span style={{
-                  fontSize: '9px',
-                  fontWeight: 700,
-                  color: 'var(--g-blue)',
-                  background: 'var(--g-blue-container)',
-                  padding: '1px 6px',
-                  borderRadius: '9999px'
-                }}>
-                  ACTIVE
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <div style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc' }}>
-                  {bankTelemetry.razorpay?.latency_ms || 115} <span style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>ms ping</span>
-                </div>
-                <div style={{ fontSize: '10px', color: 'var(--g-text-secondary)' }}>
-                  Uptime: <b style={{ color: 'var(--g-blue)' }}>{bankTelemetry.razorpay?.uptime_pct}%</b>
-                </div>
-              </div>
-              <div style={{
-                marginTop: '10px',
-                fontSize: '10px',
-                color: 'var(--g-text-tertiary)',
-                textAlign: 'center',
-                padding: '4px'
-              }}>
-                Card & Mandate Fallback Rail
-              </div>
-            </div>
-          </div>
-
-          {/* Real-time Dynamic Routing Visualizer Flow */}
-          <div style={{
-            background: 'var(--g-surface-2)',
-            border: '1px solid var(--g-border)',
-            borderRadius: '12px',
-            padding: '10px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '10px',
-            fontSize: '11px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--g-text-secondary)', fontWeight: 600 }}>
-              <Activity size={14} color="var(--g-blue)" />
-              <span>LIVE TRAFFIC PIPELINE:</span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <span style={{ color: '#f8fafc', fontWeight: 700 }}>[Customer UPI Checkout]</span>
-              <span style={{ color: 'var(--g-text-tertiary)' }}>➔</span>
-              
-              {isHdfcOutage ? (
-                <>
-                  <span style={{
-                    color: 'var(--g-red)',
-                    fontWeight: 800,
-                    textDecoration: 'line-through',
-                    background: 'var(--g-red-container)',
-                    padding: '2px 8px',
-                    borderRadius: '6px'
-                  }}>
-                    [HDFC Core 2450ms TIMEOUT]
-                  </span>
-                  <span style={{ color: 'var(--g-green)', fontWeight: 800 }}>⚡ BYPASS ➔</span>
-                  <span style={{
-                    color: 'var(--g-green)',
-                    fontWeight: 800,
-                    background: 'var(--g-green-container)',
-                    border: '1px solid var(--g-green)',
-                    padding: '2px 10px',
-                    borderRadius: '6px'
-                  }}>
-                    [ICICI Secondary Rail (84ms)]
-                  </span>
-                </>
-              ) : (
-                <span style={{
-                  color: 'var(--g-green)',
-                  fontWeight: 700,
-                  background: 'var(--g-surface-3)',
-                  padding: '2px 8px',
-                  borderRadius: '6px'
-                }}>
-                  [HDFC Primary Node (92ms)]
-                </span>
-              )}
-
-              <span style={{ color: 'var(--g-text-tertiary)' }}>➔</span>
-              <span style={{ color: '#f8fafc', fontWeight: 700 }}>[NPCI Switch]</span>
-              <span style={{ color: 'var(--g-text-tertiary)' }}>➔</span>
-              <span style={{ color: 'var(--g-green)', fontWeight: 700 }}>[Merchant Settlement (0ms Churn)]</span>
-            </div>
-          </div>
-        </div>
-
-        {/* PROACTIVE STATE-CHANGE AI NARRATIVE BANNER (PROVES AI RESPONDS TO STATE CHANGES) */}
-        {stateChangeNarrative && (
-          <div style={{
-            background: isHdfcOutage ? 'rgba(242, 139, 130, 0.14)' : 'rgba(129, 201, 149, 0.14)',
-            border: `1px solid ${isHdfcOutage ? 'var(--g-red)' : 'var(--g-green)'}`,
-            borderRadius: '14px',
-            padding: '12px 18px',
-            marginBottom: '18px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '14px',
-            animation: 'slideDownToast 0.3s cubic-bezier(0.2, 0, 0, 1)',
-            boxShadow: isHdfcOutage ? '0 8px 30px rgba(242, 139, 130, 0.2)' : '0 8px 30px rgba(129, 201, 149, 0.2)'
-          }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              background: isHdfcOutage ? 'var(--g-red-container)' : 'var(--g-green-container)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              <Zap size={16} color={isHdfcOutage ? 'var(--g-red)' : 'var(--g-green)'} />
-            </div>
-            <div style={{ flex: 1, fontSize: '12px', fontWeight: 600, color: '#f8fafc', lineHeight: '1.4' }}>
-              <div>{stateChangeNarrative}</div>
-              {isHdfcOutage && (
-                <button
-                  onClick={() => triggerSimulation('upi_timeout')}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span
+                  className="badge"
                   style={{
-                    marginTop: '6px',
-                    background: 'var(--g-blue-container)',
-                    color: 'var(--g-blue)',
-                    border: '1px solid rgba(138, 180, 248, 0.4)',
-                    borderRadius: '6px',
-                    padding: '3px 10px',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
+                    background: hitlMode ? 'var(--color-warning-light)' : 'var(--color-blue-light)',
+                    color: hitlMode ? 'var(--color-warning)' : 'var(--color-blue)',
+                    border: `1px solid ${hitlMode ? 'var(--color-warning-border)' : 'var(--color-blue-border)'}`,
+                    padding: '5px 10px'
                   }}
                 >
-                  <Play size={10} />
-                  <span>Test UPI Preemptive Failover (Simulate ₹499 Payment)</span>
+                  <UserCheck size={13} />
+                  <span>{hitlMode ? 'Supervised (HITL) Mode' : '100% Autonomous Mode'}</span>
+                </span>
+
+                <button
+                  onClick={handleExportCsv}
+                  className="btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '12px' }}
+                >
+                  <Download size={13} />
+                  <span>Export CSV</span>
                 </button>
-              )}
+              </div>
             </div>
-            <button onClick={() => setStateChangeNarrative(null)} style={{ background: 'transparent', border: 'none', color: 'var(--g-text-tertiary)', cursor: 'pointer' }}>
-              <X size={16} />
-            </button>
-          </div>
-        )}
 
-        {/* TAB 1: GOOGLE PAY / UPI SIMULATOR EXPERIENCE */}
-        {activeTab === 'UPI_APP' && (
-          <div style={{ maxWidth: '440px', margin: '0 auto 24px auto' }}>
-            <div style={{
-              background: 'var(--g-surface-1)',
-              border: '1px solid rgba(138, 180, 248, 0.3)',
-              borderRadius: '24px',
-              padding: '24px',
-              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)'
-            }}>
-              {/* Google Pay Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--g-border)', paddingBottom: '14px', marginBottom: '18px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    background: 'var(--g-surface-2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '1px solid rgba(138, 180, 248, 0.4)'
-                  }}>
-                    <Smartphone size={16} color="var(--g-blue)" />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#f8fafc' }}>Google Pay</div>
-                    <div style={{ fontSize: '10px', color: 'var(--g-text-tertiary)' }}>UPI Secured • Zero-Prompt Protected</div>
+            {/* 2C. Four KPI Cards */}
+            <div className="kpi-grid">
+              {/* Card 1: Revenue Recovered */}
+              <div className="fintech-card kpi-card" style={{ padding: "16px" }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Revenue Recovered
+                  </span>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--color-green-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <TrendingUp size={16} color="var(--color-green)" />
                   </div>
                 </div>
-                <div style={{
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  color: isHdfcOutage ? 'var(--g-yellow)' : 'var(--g-green)',
-                  background: isHdfcOutage ? 'var(--g-yellow-container)' : 'var(--g-green-container)',
-                  padding: '3px 8px',
-                  borderRadius: '9999px',
-                  border: `1px solid ${isHdfcOutage ? 'rgba(253, 214, 99, 0.4)' : 'rgba(129, 201, 149, 0.3)'}`
-                }}>
-                  {isHdfcOutage ? 'FAILOVER ACTIVE' : 'ACTIVE SENTINEL'}
+                <div className="font-mono kpi-num" style={{ fontSize: "24px", fontWeight: 800, color: "var(--color-green)", letterSpacing: "-0.02em", marginBottom: "4px" }}>
+                  ₹{metrics.total_recovered_usd ? metrics.total_recovered_usd.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="badge badge-green font-mono" style={{ fontSize: '11px', padding: '1px 6px' }}>
+                    {metrics.recovery_rate_pct}%
+                  </span>
+                  <span>recovery success rate</span>
                 </div>
               </div>
 
-              {/* Bill Details (Google Pay Card Style) */}
-              <div style={{
-                background: 'var(--g-surface-2)',
-                borderRadius: '16px',
-                padding: '18px',
-                textAlign: 'center',
-                border: '1px solid var(--g-border)',
-                marginBottom: '18px'
-              }}>
-                <div style={{ fontSize: '11px', color: 'var(--g-text-tertiary)' }}>Paying Merchant:</div>
-                <div style={{ fontSize: '15px', fontWeight: 700, color: '#f8fafc', marginTop: '2px' }}>
-                  Swiggy / Zomato Express (Food Delivery)
+              {/* Card 2: Revenue at Risk */}
+              <div className="fintech-card kpi-card" style={{ padding: "16px" }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Revenue at Risk
+                  </span>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--color-warning-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <AlertTriangle size={16} color="var(--color-warning)" />
+                  </div>
                 </div>
-                <div className="font-mono" style={{ fontSize: '32px', fontWeight: 900, color: 'var(--g-text-primary)', margin: '12px 0 6px 0' }}>
-                  ₹{upiAmount}.00
+                <div className="font-mono kpi-num" style={{ fontSize: "24px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em", marginBottom: "4px" }}>
+                  ₹{metrics.total_at_risk_usd ? metrics.total_at_risk_usd.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}
                 </div>
-                <div style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: 'var(--g-surface-3)',
-                  padding: '4px 10px',
-                  borderRadius: '9999px',
-                  fontSize: '10px',
-                  color: isHdfcOutage ? 'var(--g-yellow)' : 'var(--g-text-secondary)'
-                }}>
-                  <CreditCard size={12} color={isHdfcOutage ? 'var(--g-yellow)' : 'var(--g-blue)'} />
-                  <span>{isHdfcOutage ? 'HDFC Node Degraded (Auto-Rerouting to ICICI Rail)' : 'HDFC Bank UPI ••••4821'}</span>
-                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Total gross volume intercepted
+                </p>
               </div>
 
-              {/* Live Status Animation Box */}
-              {upiStage !== 'IDLE' && (
-                <div style={{
-                  padding: '16px',
-                  borderRadius: '14px',
-                  background: upiStage === 'PROCESSING' ? 'var(--g-blue-container)' :
-                              upiStage === 'FAILED' ? 'var(--g-red-container)' :
-                              upiStage === 'RECOVERING' ? 'rgba(155, 114, 207, 0.16)' :
-                              'var(--g-green-container)',
-                  border: `1px solid ${
-                    upiStage === 'PROCESSING' ? 'rgba(138, 180, 248, 0.4)' :
-                    upiStage === 'FAILED' ? 'rgba(242, 139, 130, 0.5)' :
-                    upiStage === 'RECOVERING' ? 'rgba(155, 114, 207, 0.5)' :
-                    'rgba(129, 201, 149, 0.5)'
-                  }`,
-                  marginBottom: '18px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    color: upiStage === 'FAILED' ? 'var(--g-red)' : upiStage === 'SUCCESS' ? 'var(--g-green)' : 'var(--g-blue)'
-                  }}>
-                    {upiStage === 'PROCESSING' && 'Step 1: Processing UPI request with Bank...'}
-                    {upiStage === 'FAILED' && '✕ Step 2: HDFC Bank Server Timeout!'}
-                    {upiStage === 'RECOVERING' && '⚡ Step 3: Zero-Prompt AI Intercepting...'}
-                    {upiStage === 'SUCCESS' && '🎉 Step 4: Autonomous Failover Recovered!'}
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--g-text-secondary)', marginTop: '4px' }}>
-                    {upiStageInfo}
+              {/* Card 3: Processing Fees Saved */}
+              <div className="fintech-card kpi-card" style={{ padding: "16px" }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Processing Fees Saved
+                  </span>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--color-blue-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ShieldCheck size={16} color="var(--color-blue)" />
                   </div>
                 </div>
-              )}
+                <div className="font-mono kpi-num" style={{ fontSize: "24px", fontWeight: 800, color: "var(--color-blue)", letterSpacing: "-0.02em", marginBottom: "4px" }}>
+                  ₹{metrics.total_fees_saved_usd ? (metrics.total_fees_saved_usd * 85).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  Wasted retry fines eliminated
+                </p>
+              </div>
 
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <button
-                  onClick={() => runMobileUpiTest('TIMEOUT')}
-                  disabled={upiStage === 'PROCESSING' || upiStage === 'RECOVERING'}
-                  className="g-button"
-                  style={{
-                    background: 'var(--g-blue)',
-                    color: '#041e49',
-                    border: 'none',
-                    padding: '14px',
-                    borderRadius: '9999px',
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    boxShadow: '0 4px 15px rgba(66, 133, 244, 0.3)'
-                  }}
-                >
-                  <Zap size={16} />
-                  <span>{isHdfcOutage ? '⚡ Tap to Pay (Trigger Preemptive Failover)' : 'Tap to Pay (Simulate Bank Timeout)'}</span>
-                </button>
+              {/* Card 4: Autonomous Decisions */}
+              <div className="fintech-card kpi-card" style={{ padding: "16px" }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Autonomous Decisions
+                  </span>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--bg-surface-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Cpu size={16} color="var(--text-primary)" />
+                  </div>
+                </div>
+                <div className="font-mono kpi-num" style={{ fontSize: "24px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em", marginBottom: "4px" }}>
+                  {metrics.total_events}
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  {metrics.compliance_blocks} guardrail blocks enforced
+                </p>
+              </div>
+            </div>
 
-                <button
-                  onClick={() => runMobileUpiTest('MANDATE')}
-                  disabled={upiStage === 'PROCESSING' || upiStage === 'RECOVERING'}
-                  className="g-button"
-                  style={{
-                    background: 'var(--g-surface-2)',
-                    color: 'var(--g-yellow)',
-                    border: '1px solid rgba(253, 214, 99, 0.3)',
-                    padding: '12px',
-                    borderRadius: '9999px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <Clock size={15} />
-                  <span>AutoPay Mandate (Trigger Insufficient Funds)</span>
-                </button>
+            {/* 2E. Test Your AI (Six Simple Scenario Cards) */}
+            <div className="fintech-card" style={{ padding: '24px' }}>
+              <div style={{ marginBottom: '18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <Sliders size={18} color="var(--color-blue)" />
+                  <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    Test Your AI
+                  </h2>
+                </div>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  Select any payment scenario below to observe how the autonomous engine intercepts, diagnoses, and recovers transactions in real time.
+                </p>
+              </div>
 
-                {upiStage === 'SUCCESS' && (
-                  <button
-                    onClick={() => { setUpiStage('IDLE'); setUpiStageInfo(''); }}
-                    className="g-button"
+              <div className="scenarios-grid">
+                {[
+                  {
+                    id: 'gateway_timeout',
+                    title: 'Gateway Timeout',
+                    amount: '₹499.00',
+                    rail: 'UPI / PhonePe',
+                    reason: 'NPCI UPI switch response timeout > 2400ms',
+                    action: 'Instant reroute to ICICI secondary rail'
+                  },
+                  {
+                    id: 'insufficient_funds',
+                    title: 'Insufficient Funds',
+                    amount: '₹299.00',
+                    rail: 'UPI AutoPay (SBI)',
+                    reason: 'Recurring AutoPay mandate balance shortfall',
+                    action: 'Bandit schedules payday liquidity retry'
+                  },
+                  {
+                    id: 'card_expired',
+                    title: 'Expired Card',
+                    amount: '₹1,499.00',
+                    rail: 'Visa Card (Axis)',
+                    reason: 'Card lifecycle expired in token vault',
+                    action: 'Dispatches Visa Account Updater (VAU)'
+                  },
+                  {
+                    id: 'stolen_card',
+                    title: 'Stolen Card',
+                    amount: '₹8,500.00',
+                    rail: 'Visa Card (HDFC)',
+                    reason: 'Card reported lost/stolen by cardholder',
+                    action: 'Zero-retry block prevents merchant ban'
+                  },
+                  {
+                    id: 'retry_limit_exceeded',
+                    title: 'Retry Limit Exceeded',
+                    amount: '₹1,999.00',
+                    rail: 'Mastercard (Kotak)',
+                    reason: 'Exceeded 4 retries within 16 calendar days',
+                    action: 'Enforces Visa Rule 5.4.1.3 Shield'
+                  },
+                  {
+                    id: 'high_value_hitl',
+                    title: 'High-Value Transaction',
+                    amount: '₹14,999.00',
+                    rail: 'Enterprise UPI Rail',
+                    reason: 'Large enterprise settlement timeout',
+                    action: 'Proactive failover with operator audit'
+                  }
+                ].map((sc) => (
+                  <div
+                    key={sc.id}
                     style={{
-                      background: 'transparent',
-                      color: 'var(--g-text-secondary)',
-                      border: '1px dashed var(--g-border)',
-                      padding: '8px',
-                      borderRadius: '8px',
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      marginTop: '4px'
+                      background: 'var(--bg-page)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '10px',
+                      padding: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: '12px'
                     }}
                   >
-                    Reset UPI Simulator
-                  </button>
-                )}
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {sc.title}
+                        </span>
+                        <span className="badge badge-neutral font-mono">{sc.amount}</span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--color-blue)', fontWeight: 600, marginBottom: '6px' }}>
+                        {sc.rail}
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px', lineHeight: 1.4 }}>
+                        {sc.reason}
+                      </p>
+                      <div style={{ fontSize: '11px', color: 'var(--color-green)', fontWeight: 600 }}>
+                        ➔ {sc.action}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => triggerSimulation(sc.id)}
+                      disabled={simulating === sc.id}
+                      className="btn-primary"
+                      style={{ width: '100%', fontSize: '12px', padding: '7px 12px' }}
+                    >
+                      {simulating === sc.id ? (
+                        <>
+                          <RotateCw size={13} className="spin" />
+                          <span>Executing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play size={12} fill="currentColor" />
+                          <span>Test Scenario</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
-        )}
 
-        {/* 4 Metric Counter Cards (Google Cloud Dashboard Style) */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '14px',
-          marginBottom: '22px'
-        }}>
-          {/* Revenue at Risk */}
-          <div className="g-card" style={metricCardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--g-text-secondary)', fontSize: '12px', fontWeight: 500 }}>
-              <span>REVENUE AT RISK</span>
-              <AlertCircle size={16} color="var(--g-red)" />
-            </div>
-            <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: 'var(--g-red)' }}>
-              ₹{metrics.total_at_risk_usd ? metrics.total_at_risk_usd.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--g-text-tertiary)', marginTop: '4px' }}>
-              From {metrics.total_events || 0} failed transaction events
-            </div>
-          </div>
-
-          {/* Autonomous Recovered */}
-          <div className="g-card" style={{ ...metricCardStyle, border: '1px solid rgba(129, 201, 149, 0.3)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--g-green)', fontSize: '12px', fontWeight: 500 }}>
-              <span>AUTONOMOUS RECOVERED</span>
-              <Banknote size={16} color="var(--g-green)" />
-            </div>
-            <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: 'var(--g-green)' }}>
-              ₹{metrics.total_recovered_usd ? metrics.total_recovered_usd.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--g-green)', marginTop: '4px' }}>
-              Recovered without manual chat prompts
-            </div>
-          </div>
-
-          {/* Fees Preserved */}
-          <div className="g-card" style={metricCardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--g-text-secondary)', fontSize: '12px', fontWeight: 500 }}>
-              <span>FEES PRESERVED</span>
-              <PiggyBank size={16} color="var(--g-blue)" />
-            </div>
-            <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: 'var(--g-blue)' }}>
-              ₹{metrics.total_fees_saved_usd ? (metrics.total_fees_saved_usd * 85).toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '0'}
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--g-text-tertiary)', marginTop: '4px' }}>
-              {metrics.compliance_blocks || 0} regulatory blocks enforced
-            </div>
-          </div>
-
-          {/* Net Recovery Rate */}
-          <div className="g-card" style={metricCardStyle}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--g-text-secondary)', fontSize: '12px', fontWeight: 500 }}>
-              <span>RECOVERY EFFICIENCY</span>
-              <TrendingUp size={16} color="#c084fc" />
-            </div>
-            <div className="font-mono" style={{ fontSize: '24px', fontWeight: 800, marginTop: '8px', color: '#c084fc' }}>
-              {metrics.recovery_rate_pct ? metrics.recovery_rate_pct.toFixed(1) : '0.0'}%
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--g-text-tertiary)', marginTop: '4px' }}>
-              Contextual Multi-Armed Bandit ROI
-            </div>
-          </div>
-        </div>
-
-        {/* TAB 2: AUTONOMOUS AUDIT STREAM & SIMULATION BAR */}
-        {activeTab === 'RADAR' && (
-          <>
-            {/* Interactive Testbench (Google Cloud Run Style) */}
-            <section className="g-card" style={{
-              background: 'var(--g-surface-1)',
-              border: '1px solid var(--g-border)',
-              borderRadius: '16px',
-              padding: '18px',
-              marginBottom: '24px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
+            {/* 2D. AI Activity (Vertical Timeline) */}
+            <div className="fintech-card" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Zap size={16} color="var(--g-blue)" />
-                    <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
-                      UPI & MULTI-RAIL SCENARIO TESTBENCH
-                    </h2>
-                  </div>
-                  <p style={{ fontSize: '11px', color: 'var(--g-text-secondary)', margin: '2px 0 0 0' }}>
-                    Trigger ambient real-world payment failures or live bank core outages to test proactive AI preemption.
+                  <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                    AI Activity Timeline
+                  </h2>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Chronological audit log of autonomous recoveries, model diagnoses, and regulatory checks.
                   </p>
                 </div>
-                <button
-                  onClick={() => setShowCustomModal(true)}
-                  className="g-button"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: 'var(--g-blue-container)',
-                    border: '1px solid rgba(138, 180, 248, 0.3)',
-                    color: 'var(--g-blue)',
-                    padding: '6px 14px',
-                    borderRadius: '9999px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
-                >
-                  <PlusCircle size={13} />
-                  <span>Custom Webhook</span>
-                </button>
-              </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
-                <button
-                  onClick={() => triggerSimulation('upi_timeout')}
-                  disabled={simulating !== null}
-                  className="g-button"
-                  style={{
-                    ...simBtnStyle,
-                    border: isHdfcOutage ? '1px solid rgba(242, 139, 130, 0.4)' : '1px solid var(--g-border)',
-                    background: isHdfcOutage ? 'var(--g-red-container)' : 'var(--g-surface-2)'
-                  }}
-                >
-                  <Smartphone size={14} color={isHdfcOutage ? 'var(--g-red)' : 'var(--g-blue)'} />
-                  <span>{isHdfcOutage ? '⚡ 1. HDFC Outage ➔ Preemptive Failover' : '1. UPI Timeout (₹499) ➔ ICICI Switch'}</span>
-                </button>
-
-                <button
-                  onClick={() => triggerSimulation('upi_mandate')}
-                  disabled={simulating !== null}
-                  className="g-button"
-                  style={simBtnStyle}
-                >
-                  <Clock size={14} color="var(--g-yellow)" />
-                  <span>2. AutoPay Mandate (₹299) ➔ Payday Retry</span>
-                </button>
-
-                <button
-                  onClick={() => triggerSimulation('processor_timeout')}
-                  disabled={simulating !== null}
-                  className="g-button"
-                  style={simBtnStyle}
-                >
-                  <CreditCard size={14} color="var(--g-green)" />
-                  <span>3. RuPay Latency (₹2,490) ➔ Secondary Rail</span>
-                </button>
-
-                <button
-                  onClick={() => triggerSimulation('stolen_card')}
-                  disabled={simulating !== null}
-                  className="g-button"
-                  style={simBtnStyle}
-                >
-                  <AlertTriangle size={14} color="var(--g-red)" />
-                  <span>4. Stolen Card (₹8,500) ➔ Zero-Loss Abandon</span>
-                </button>
-
-                <button
-                  onClick={() => triggerSimulation('retry_limit_exceeded')}
-                  disabled={simulating !== null}
-                  className="g-button"
-                  style={simBtnStyle}
-                >
-                  <ShieldAlert size={14} color="#f43f5e" />
-                  <span>5. 16-Day Limit (₹1,999) ➔ Compliance Block</span>
-                </button>
-
-                <button
-                  onClick={() => triggerSimulation('high_value_hitl')}
-                  disabled={simulating !== null}
-                  className="g-button"
-                  style={{ ...simBtnStyle, border: '1px solid rgba(253, 214, 99, 0.4)', background: 'var(--g-yellow-container)' }}
-                >
-                  <UserCheck size={14} color="var(--g-yellow)" />
-                  <span>6. High-Value (₹14,999) ➔ HITL Review</span>
-                </button>
-              </div>
-            </section>
-
-            {/* Autonomous Audit Stream Feed */}
-            <section>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Activity size={16} color="var(--g-green)" />
-                  <h2 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: '#f8fafc' }}>
-                    AUTONOMOUS REVENUE AUDIT STREAM
-                  </h2>
-                  <span className="font-mono" style={{
-                    background: 'var(--g-surface-2)',
-                    padding: '2px 8px',
-                    borderRadius: '9999px',
-                    fontSize: '11px',
-                    color: 'var(--g-text-secondary)',
-                    border: '1px solid var(--g-border)'
-                  }}>
-                    {filteredRecords.length} records
-                  </span>
-                </div>
-
-                {/* Google Material 3 Filter Chips */}
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  {['ALL', 'RECOVERED', 'BLOCKED', 'ABANDONED'].map((f) => (
+                {/* Filter pills */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {['ALL', 'RECOVERED', 'SCHEDULED', 'BLOCKED'].map((f) => (
                     <button
                       key={f}
-                      onClick={() => setFilter(f)}
-                      className="g-button"
+                      onClick={() => setActivityFilter(f)}
                       style={{
-                        background: filter === f ? 'var(--g-blue)' : 'var(--g-surface-2)',
-                        color: filter === f ? '#041e49' : 'var(--g-text-secondary)',
-                        border: `1px solid ${filter === f ? 'transparent' : 'var(--g-border)'}`,
-                        padding: '4px 12px',
-                        borderRadius: '9999px',
+                        padding: '4px 10px',
+                        borderRadius: 'var(--radius-pill)',
                         fontSize: '11px',
                         fontWeight: 600,
+                        border: '1px solid var(--border-color)',
+                        background: activityFilter === f ? 'var(--color-blue)' : '#FFFFFF',
+                        color: activityFilter === f ? '#FFFFFF' : 'var(--text-secondary)',
                         cursor: 'pointer'
                       }}
                     >
@@ -1400,798 +868,1166 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Audit Cards Feed */}
               {filteredRecords.length === 0 ? (
-                <div style={{
-                  background: 'var(--g-surface-1)',
-                  border: '1px dashed var(--g-border)',
-                  borderRadius: '16px',
-                  padding: '44px 20px',
-                  textAlign: 'center',
-                  color: 'var(--g-text-secondary)'
-                }}>
-                  <Radio size={32} color="var(--g-text-tertiary)" style={{ marginBottom: '10px', opacity: 0.6 }} />
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#f8fafc' }}>
-                    Listening for ambient webhook events...
-                  </div>
-                  <p style={{ fontSize: '12px', marginTop: '4px', color: 'var(--g-text-tertiary)' }}>
-                    Tap any simulation button above or toggle the HDFC Bank Outage sensor!
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)' }}>
+                  <Activity size={32} style={{ margin: '0 auto 12px', color: 'var(--text-tertiary)' }} />
+                  <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                    No decisions recorded yet
                   </p>
+                  <p style={{ fontSize: '12px', maxWidth: '400px', margin: '0 auto 16px' }}>
+                    Click "Test Scenario" above or start the "Live Stream" to observe the AI sentinel recovering transactions.
+                  </p>
+                  <button onClick={() => triggerSimulation('gateway_timeout')} className="btn-primary" style={{ fontSize: '12px' }}>
+                    Run Sample Recovery
+                  </button>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {filteredRecords.map((record) => (
-                    <AuditCard 
-                      key={record.id} 
-                      record={record} 
-                      hitlMode={hitlMode}
-                      activeOverrideId={activeOverrideId}
-                      setActiveOverrideId={setActiveOverrideId}
-                      onOverride={overrideAction}
-                      onOpenToolModal={(type, rec) => setToolModal({ type, record: rec })}
-                    />
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {filteredRecords.slice(0, 10).map((rec) => {
+                    const isRecovered = rec.outcome === 'RECOVERED';
+                    const isScheduled = rec.outcome === 'SCHEDULED';
+                    const isBlocked = rec.outcome === 'COMPLIANCE_BLOCKED' || rec.outcome === 'ABANDONED_FEES_SAVED';
+                    const isSelected = selectedRecord?.id === rec.id;
+
+                    return (
+                      <div
+                        key={rec.id}
+                        onClick={() => setSelectedRecord(rec)}
+                        style={{
+                          background: isSelected ? 'var(--color-blue-light)' : '#FFFFFF',
+                          border: `1px solid ${isSelected ? 'var(--color-blue-border)' : 'var(--border-color)'}`,
+                          borderRadius: '10px',
+                          padding: '14px 18px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: '12px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {/* Left: Transaction Info */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: '240px' }}>
+                          <div
+                            style={{
+                              width: '38px',
+                              height: '38px',
+                              borderRadius: '8px',
+                              background: isRecovered ? 'var(--color-green-light)' : isScheduled ? 'var(--color-blue-light)' : 'var(--color-warning-light)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            {isRecovered ? (
+                              <CheckCircle2 size={18} color="var(--color-green)" />
+                            ) : isScheduled ? (
+                              <Clock size={18} color="var(--color-blue)" />
+                            ) : (
+                              <ShieldAlert size={18} color="var(--color-warning)" />
+                            )}
+                          </div>
+
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span className="font-mono" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                                ₹{rec.transaction?.amount?.toFixed(2)}
+                              </span>
+                              <span className="badge badge-neutral font-mono" style={{ fontSize: '10px' }}>
+                                {rec.transaction?.card_network}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                              {rec.transaction?.issuing_bank}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Middle: AI Root Cause & Action */}
+                        <div style={{ flex: 1, minWidth: '280px' }}>
+                          {isBlocked ? (
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                                <span style={{
+                                  background: '#FEF2F2',
+                                  border: '1px solid #FECACA',
+                                  color: '#DC2626',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  <ShieldAlert size={12} color="#DC2626" />
+                                  <span>BLOCKED REASON: {
+                                    rec.transaction?.decline_code === 'lost_or_stolen_card' ? 'Card Reported Lost / Stolen by Cardholder (Anti-Fraud Rule)' :
+                                    rec.transaction?.retry_count >= 4 ? 'Exceeded 4-Retry Limit (Visa/Mastercard Rule 5.4)' :
+                                    rec.compliance?.status === 'COMPLIANCE_BLOCKED' ? 'Regulatory Compliance Violation' :
+                                    'Terminal Bank Refusal (Do Not Honor)'
+                                  }</span>
+                                </span>
+                                <span style={{ fontSize: '11px', color: '#16A34A', fontWeight: 600 }}>
+                                  • Preserved ₹30 Interchange Penalty
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                                {rec.compliance?.reason && rec.compliance.reason !== 'All 5 Card Network & Regulatory compliance rules verified. Action cleared for execution.' 
+                                  ? rec.compliance.reason 
+                                  : rec.diagnosis?.root_cause || rec.optimization?.action_reasoning}
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '3px' }}>
+                                {rec.optimization?.chosen_action}
+                              </div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span>Cause: {rec.diagnosis?.root_cause?.slice(0, 50)}...</span>
+                                <span>•</span>
+                                <span className="font-mono" style={{ color: 'var(--color-blue)', fontWeight: 600 }}>
+                                  P(Rec): {(rec.diagnosis?.recovery_probability * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right: Outcome Badge & Latency */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ textAlign: 'right' }}>
+                            {isRecovered && (
+                              <span className="badge badge-green font-mono">
+                                +₹{rec.recovered_amount_usd?.toFixed(0)} Recovered
+                              </span>
+                            )}
+                            {isScheduled && (
+                              <span className="badge badge-blue font-mono">
+                                Scheduled Payday
+                              </span>
+                            )}
+                            {isBlocked && (
+                              <span className="badge font-mono" style={{ background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontWeight: 700 }}>
+                                🚫 Blocked: Fee Saved
+                              </span>
+                            )}
+                            <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                              {rec.latency_ms}ms latency
+                            </div>
+                          </div>
+
+                          <ChevronRight size={16} color="var(--text-tertiary)" />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
-            </section>
-          </>
+            </div>
+          </div>
         )}
-      </main>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR (Google Material 3 Navigation Bar) */}
-      <nav style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: '64px',
-        background: 'rgba(30, 31, 32, 0.95)',
-        borderTop: '1px solid var(--g-border)',
-        backdropFilter: 'blur(20px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-around',
-        zIndex: 500
-      }}>
-        <button
-          onClick={() => setActiveTab('RADAR')}
-          className="g-button"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: activeTab === 'RADAR' ? 'var(--g-blue)' : 'var(--g-text-tertiary)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '4px',
-            fontSize: '11px',
-            fontWeight: 600,
-            cursor: 'pointer'
-          }}
-        >
-          <div style={{
-            background: activeTab === 'RADAR' ? 'var(--g-blue-container)' : 'transparent',
-            padding: '3px 14px',
-            borderRadius: '9999px'
-          }}>
-            <Activity size={18} />
-          </div>
-          <span>RADAR FEED</span>
-        </button>
+        {/* ============================================================== */}
+        {/* TAB 2: LIVE RADAR (Bank & Gateway Health Monitoring) */}
+        {/* ============================================================== */}
+        {activeTab === 'RADAR' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Header Description */}
+            <div
+              style={{
+                background: '#FFFFFF',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-card)',
+                padding: '20px 24px',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <h1 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                    Live Gateway & Bank Telemetry Radar
+                  </h1>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', maxWidth: '720px' }}>
+                    Ambient background sensor continuously monitoring core UPI switches and gateway nodes. Automatically executes preemptive routing before customer checkout drops.
+                  </p>
+                </div>
 
-        <button
-          onClick={() => setActiveTab('UPI_APP')}
-          className="g-button"
-          style={{
-            background: activeTab === 'UPI_APP' ? 'var(--g-blue-container)' : 'var(--g-surface-2)',
-            border: `1px solid ${activeTab === 'UPI_APP' ? 'rgba(138, 180, 248, 0.4)' : 'var(--g-border)'}`,
-            color: activeTab === 'UPI_APP' ? 'var(--g-blue)' : '#f8fafc',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '8px 18px',
-            borderRadius: '9999px',
-            fontSize: '12px',
-            fontWeight: 700,
-            cursor: 'pointer',
-            boxShadow: activeTab === 'UPI_APP' ? '0 0 20px rgba(138, 180, 248, 0.25)' : 'none'
-          }}
-        >
-          <Smartphone size={16} />
-          <span>📱 GOOGLE PAY VIEW</span>
-        </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    onClick={() => toggleOutage('hdfc')}
+                    className="btn-secondary"
+                    style={{
+                      background: isHdfcOutage ? 'var(--color-error-light)' : '#FFFFFF',
+                      borderColor: isHdfcOutage ? 'var(--color-error-border)' : 'var(--border-color)',
+                      color: isHdfcOutage ? 'var(--color-error)' : 'var(--text-primary)'
+                    }}
+                  >
+                    <AlertTriangle size={14} />
+                    <span>{isHdfcOutage ? 'Resolve HDFC Outage' : 'Simulate HDFC Outage'}</span>
+                  </button>
 
-        <a
-          href={`${API_BASE}/api/audit/csv`}
-          download="payrevive_audit_report.csv"
-          className="g-button"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--g-text-tertiary)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '4px',
-            fontSize: '11px',
-            fontWeight: 600,
-            textDecoration: 'none'
-          }}
-        >
-          <div style={{ padding: '3px 14px' }}>
-            <Download size={18} />
-          </div>
-          <span>AUDIT CSV</span>
-        </a>
-      </nav>
-
-      {/* Cross-Tool Dispatch Preview Modal (Google Material Dialog Style) */}
-      {toolModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          background: 'rgba(0,0,0,0.8)',
-          backdropFilter: 'blur(10px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1100
-        }}>
-          <div style={{
-            background: 'var(--g-surface-1)',
-            border: '1px solid var(--g-border-hover)',
-            borderRadius: '20px',
-            padding: '24px',
-            maxWidth: '440px',
-            width: '90%',
-            boxShadow: '0 24px 60px rgba(0,0,0,0.8)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '15px', fontWeight: 700 }}>
-                {toolModal.type === 'WHATSAPP' ? (
-                  <>
-                    <MessageSquare size={18} color="#25D366" />
-                    <span style={{ color: '#25D366' }}>Dispatched Customer WhatsApp Message</span>
-                  </>
-                ) : (
-                  <>
-                    <Share2 size={18} color="#E01E5A" />
-                    <span style={{ color: '#E01E5A' }}>Dispatched Merchant Slack Incident</span>
-                  </>
-                )}
+                  <button
+                    onClick={toggleTraffic}
+                    className="btn-primary"
+                    style={{
+                      background: trafficRunning ? 'var(--color-error)' : 'var(--color-blue)'
+                    }}
+                  >
+                    {trafficRunning ? <Square size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
+                    <span>{trafficRunning ? 'Stop Payment Stream' : 'Start Live Stream'}</span>
+                  </button>
+                </div>
               </div>
-              <button onClick={() => setToolModal(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--g-text-tertiary)' }}>
-                <X size={18} />
-              </button>
             </div>
 
-            {toolModal.type === 'WHATSAPP' ? (
-              <div style={{
-                background: '#0b141a',
-                borderRadius: '12px',
-                padding: '14px',
-                border: '1px solid #202c33'
-              }}>
-                <div style={{ fontSize: '11px', color: '#8696a0', marginBottom: '8px' }}>
-                  To: Customer (+91 98765-XXXXX) • Automated Zero-Prompt Link
-                </div>
-                <div style={{
-                  background: '#005c4b',
-                  color: '#e9edef',
-                  padding: '12px 14px',
-                  borderRadius: '10px',
-                  fontSize: '13px',
-                  lineHeight: '1.4'
-                }}>
-                  <div>👋 Hi Rahul, your payment of <b>₹{toolModal.record.transaction.amount}</b> to Swiggy timed out on your primary bank.</div>
-                  <div style={{ marginTop: '8px' }}>⚡ PayRevive auto-failover scheduled: Tap below to complete with 1-click UPI (No OTP needed):</div>
-                  <div style={{ marginTop: '10px', color: '#53bdeb', textDecoration: 'underline' }}>
-                    https://payrevive.ai/pay/{toolModal.record.id}
+            {/* Radar Node Grid */}
+            <div className="radar-grid">
+              {Object.entries(bankTelemetry).map(([key, node]) => {
+                const isOutage = node.status === 'CRITICAL_OUTAGE';
+                const isFailover = node.status === 'ACTIVE_FAILOVER';
+
+                return (
+                  <div
+                    key={key}
+                    className="fintech-card"
+                    style={{
+                      padding: '20px',
+                      borderLeft: `4px solid ${isOutage ? 'var(--color-error)' : isFailover ? 'var(--color-blue)' : 'var(--color-green)'}`
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        {node.name}
+                      </span>
+                      <span
+                        className="badge"
+                        style={{
+                          background: isOutage ? 'var(--color-error-light)' : isFailover ? 'var(--color-blue-light)' : 'var(--color-green-light)',
+                          color: isOutage ? 'var(--color-error)' : isFailover ? 'var(--color-blue)' : 'var(--color-green)',
+                          fontSize: '11px'
+                        }}
+                      >
+                        {node.status}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '8px' }}>
+                      <span className="font-mono" style={{ fontSize: '24px', fontWeight: 800, color: isOutage ? 'var(--color-error)' : 'var(--text-primary)' }}>
+                        {node.latency_ms}
+                      </span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>ms latency</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px' }}>
+                      <span>Network Uptime</span>
+                      <span className="font-mono" style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                        {node.uptime_pct}%
+                      </span>
+                    </div>
+
+                    {node.proactive_reroute_active && (
+                      <div style={{ marginTop: '10px', padding: '6px 8px', background: 'var(--color-blue-light)', borderRadius: '6px', fontSize: '11px', color: 'var(--color-blue)', fontWeight: 600 }}>
+                        ⚡ Traffic Preemptively Rerouted
+                      </div>
+                    )}
                   </div>
-                  <div style={{ textAlign: 'right', fontSize: '10px', color: '#8696a0', marginTop: '6px' }}>Just now • Delivered ✓✓</div>
+                );
+              })}
+            </div>
+
+            {/* Architecture Explainer */}
+            <div className="fintech-card" style={{ padding: '24px' }}>
+              <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                How Preemptive State Failover Operates
+              </h2>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '16px' }}>
+                Unlike reactive chatbox tools that wait for a human operator, PayRevive continuously measures rolling 10-second latency and error rate percentiles across issuing banks. If an issuer node (e.g. HDFC Core Banking) exceeds 1200ms or drops packets, the sentinel flips incoming routing tables to secondary rails (ICICI / Axis Direct) in under 50 milliseconds.
+              </p>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-primary)', fontWeight: 600 }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-green)' }} />
+                  <span>Threshold: &lt; 200ms Optimal</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-primary)', fontWeight: 600 }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-warning)' }} />
+                  <span>Degraded: 200ms - 1200ms</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-primary)', fontWeight: 600 }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--color-error)' }} />
+                  <span>Outage Preemption: &gt; 1200ms Auto-Failover</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 3: AI INTELLIGENCE (ML, SHAP & Contextual Bandit) */}
+        {/* ============================================================== */}
+        {activeTab === 'AI_INTELLIGENCE' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div
+              style={{
+                background: '#FFFFFF',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-card)',
+                padding: '20px 24px',
+                boxShadow: 'var(--shadow-sm)'
+              }}
+            >
+              <h1 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                Machine Learning & Decision Attribution
+              </h1>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                Inspect the Gradient Boosting Classifier, TreeSHAP feature attributions, and Thompson Sampling bandit policy for any intercepted payment failure.
+              </p>
+            </div>
+
+            {selectedRecord ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                {/* Left Card: TreeSHAP Feature Attribution */}
+                <div className="fintech-card" style={{ padding: '24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                    <div>
+                      <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        TreeSHAP Feature Attributions
+                      </h2>
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        Local game-theoretic weights explaining why the model predicted P(Recovery).
+                      </p>
+                    </div>
+                    <span className="badge badge-blue font-mono">
+                      P(Rec): {(selectedRecord.diagnosis?.recovery_probability * 100).toFixed(1)}%
+                    </span>
+                  </div>
+
+                  {/* SHAP Bars */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+                    {selectedRecord.diagnosis?.shap_attributions?.map((attr, idx) => {
+                      const isPositive = attr.shap_value > 0;
+                      const absWidth = Math.min(Math.abs(attr.shap_value) * 100, 100);
+
+                      return (
+                        <div key={idx}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{attr.feature}</span>
+                            <span className="font-mono" style={{ fontWeight: 700, color: isPositive ? 'var(--color-green)' : 'var(--color-error)' }}>
+                              {isPositive ? `+${attr.shap_value.toFixed(2)}` : attr.shap_value.toFixed(2)}
+                            </span>
+                          </div>
+                          <div style={{ height: '6px', background: 'var(--bg-surface-subtle)', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div
+                              style={{
+                                width: `${absWidth}%`,
+                                height: '100%',
+                                background: isPositive ? 'var(--color-green)' : 'var(--color-error)',
+                                borderRadius: '3px'
+                              }}
+                            />
+                          </div>
+                          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                            {attr.description}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {(selectedRecord.outcome === 'ABANDONED_FEES_SAVED' || selectedRecord.outcome === 'COMPLIANCE_BLOCKED') && (
+                    <div style={{ padding: '14px', background: '#FEF2F2', borderRadius: '8px', border: '1px solid #FECACA', fontSize: '12px', marginBottom: '16px' }}>
+                      <div style={{ fontWeight: 700, color: '#DC2626', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                        <ShieldAlert size={16} color="#DC2626" />
+                        <span>REASON WHY PAYMENT WAS BLOCKED BY AI SENTINEL:</span>
+                      </div>
+                      <div style={{ color: '#7F1D1D', fontWeight: 600, lineHeight: 1.5, marginBottom: '6px' }}>
+                        {selectedRecord.compliance?.reason && selectedRecord.compliance.reason !== 'All 5 Card Network & Regulatory compliance rules verified. Action cleared for execution.'
+                          ? selectedRecord.compliance.reason
+                          : selectedRecord.diagnosis?.root_cause || selectedRecord.optimization?.action_reasoning}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#991B1B' }}>
+                        • <b>Mandate Enforced:</b> {selectedRecord.transaction?.decline_code === 'lost_or_stolen_card' ? 'Visa/Mastercard Core Rule 5.1 & RBI Anti-Fraud Directive' : 'Visa Rule 5.4.1.3 (Max 4 Retries / 16 Days)'}<br />
+                        • <b>Action:</b> ABANDON_NO_RETRY (Terminal retry suppressor engaged)<br />
+                        • <b>Financial Saving:</b> Preserved interchange retry penalty fee ($0.35 / ₹30) & prevented dispute chargeback.
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ padding: '12px', background: 'var(--bg-page)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '12px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                      Model Diagnosis Summary:
+                    </div>
+                    <div style={{ color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                      {selectedRecord.diagnosis?.root_cause}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Card: Contextual Bandit Policy */}
+                <div className="fintech-card" style={{ padding: '24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                    <div>
+                      <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        Contextual Multi-Armed Bandit
+                      </h2>
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        Thompson Sampling optimization balancing exploration vs fee preservation.
+                      </p>
+                    </div>
+                    <span className="badge badge-green font-mono">
+                      +₹{selectedRecord.optimization?.expected_recovery_value_usd?.toFixed(2)} ROI
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '20px' }}>
+                    <div style={{ padding: '14px', background: 'var(--bg-page)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>
+                        Selected Recovery Action
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-blue)', marginBottom: '6px' }}>
+                        {selectedRecord.optimization?.chosen_action}
+                      </div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                        {selectedRecord.optimization?.action_reasoning}
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div style={{ padding: '10px 12px', background: 'var(--bg-page)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Exploration Strategy</div>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>
+                          {selectedRecord.optimization?.exploration_strategy}
+                        </div>
+                      </div>
+
+                      <div style={{ padding: '10px 12px', background: 'var(--bg-page)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Interchange Risk Floor</div>
+                        <div className="font-mono" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>
+                          ₹{(selectedRecord.optimization?.estimated_cost_usd * 85).toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dispatched Tools Preview */}
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                      Dispatched Cross-Tool Actions:
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {selectedRecord.dispatched_tools?.map((tool, i) => {
+                        const isWhatsapp = tool.toLowerCase().includes('whatsapp');
+                        const isSlack = tool.toLowerCase().includes('slack');
+
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => {
+                              if (isWhatsapp) setShowToolModal({ type: 'WHATSAPP', record: selectedRecord });
+                              if (isSlack) setShowToolModal({ type: 'SLACK', record: selectedRecord });
+                            }}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: 'var(--radius-pill)',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              background: isWhatsapp ? '#ECFDF5' : isSlack ? '#FEF2F2' : 'var(--bg-surface-subtle)',
+                              color: isWhatsapp ? '#059669' : isSlack ? '#DC2626' : 'var(--text-primary)',
+                              border: `1px solid ${isWhatsapp ? '#A7F3D0' : isSlack ? '#FECACA' : 'var(--border-color)'}`,
+                              cursor: isWhatsapp || isSlack ? 'pointer' : 'default',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <span>{tool}</span>
+                            {(isWhatsapp || isSlack) && <ExternalLink size={11} />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (
-              <div style={{
-                background: '#1a1d21',
-                borderRadius: '12px',
-                padding: '14px',
-                border: '1px solid #383f45'
-              }}>
-                <div style={{ fontSize: '11px', color: '#9ba1a6', marginBottom: '8px' }}>
-                  Channel: #finops-radar-alerts • Bot: PayRevive-Sentinel
-                </div>
-                <div style={{
-                  background: '#222529',
-                  borderLeft: '4px solid var(--g-green)',
-                  padding: '12px 14px',
-                  borderRadius: '6px',
-                  fontSize: '12px'
-                }}>
-                  <div style={{ fontWeight: 700, color: 'var(--g-green)' }}>⚡ REVENUE RECOVERED: ₹{toolModal.record.recovered_amount_usd}</div>
-                  <div style={{ color: '#d1d2d3', marginTop: '4px', fontSize: '11px' }}>
-                    • Cause: {toolModal.record.diagnosis.root_cause}<br />
-                    • Action: {toolModal.record.optimization.chosen_action}<br />
-                    • Latency: {toolModal.record.latency_ms}ms • Zero Prompts Required
-                  </div>
-                </div>
+              <div className="fintech-card" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                Please run a test scenario from Overview to inspect ML and bandit attributions.
               </div>
             )}
+          </div>
+        )}
 
-            <button
-              onClick={() => setToolModal(null)}
-              className="g-button"
+        {/* ============================================================== */}
+        {/* TAB 4: TESTBENCH (Interactive Simulation & Custom Webhooks) */}
+        {/* ============================================================== */}
+        {activeTab === 'TESTBENCH' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div
               style={{
-                width: '100%',
-                marginTop: '16px',
-                background: 'var(--g-surface-2)',
-                color: '#fff',
-                border: '1px solid var(--g-border)',
-                padding: '10px',
-                borderRadius: '9999px',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer'
+                background: '#FFFFFF',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-card)',
+                padding: '20px 24px',
+                boxShadow: 'var(--shadow-sm)'
               }}
             >
-              Close Dispatch Preview
-            </button>
-          </div>
-        </div>
-      )}
+              <h1 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                Interactive Scenario & Webhook Testbench
+              </h1>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                Simulate raw incoming payment webhooks from Stripe, Razorpay, Paytm, PhonePe, and UPI switches to verify autonomous decisioning.
+              </p>
+            </div>
 
-      {/* QR Code Modal for Mobile Phone Access */}
-      {showQRModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          background: 'rgba(0,0,0,0.85)',
-          backdropFilter: 'blur(10px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'var(--g-surface-1)',
-            border: '1px solid var(--g-border-hover)',
-            borderRadius: '20px',
-            padding: '28px',
-            maxWidth: '380px',
-            width: '90%',
-            textAlign: 'center',
-            boxShadow: '0 24px 60px rgba(0,0,0,0.8)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '15px' }}>
-                <Smartphone size={18} color="var(--g-blue)" />
-                <span>Open App on Mobile</span>
+            {/* Quick UPI Presets (Google Pay, Paytm, PhonePe) */}
+            <div className="fintech-card kpi-card" style={{ padding: "16px" }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>
+                Quick UPI Provider Presets
               </div>
-              <button onClick={() => setShowQRModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--g-text-tertiary)' }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <p style={{ fontSize: '12px', color: 'var(--g-text-secondary)', marginBottom: '18px' }}>
-              Scan with your phone camera (on same Wi-Fi) to run the full UPI app on Android or iPhone!
-            </p>
-
-            {/* QR Code Image */}
-            <div style={{
-              background: '#ffffff',
-              padding: '14px',
-              borderRadius: '16px',
-              display: 'inline-block',
-              marginBottom: '18px',
-              boxShadow: '0 8px 30px rgba(0,0,0,0.3)'
-            }}>
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(mobileNetworkUrl)}`}
-                alt="Mobile QR Code"
-                style={{ width: '180px', height: '180px', display: 'block' }}
-              />
-            </div>
-
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              background: 'var(--g-surface-2)',
-              border: '1px solid var(--g-border)',
-              padding: '10px 14px',
-              borderRadius: '10px',
-              fontSize: '11px',
-              fontFamily: 'monospace'
-            }}>
-              <span style={{ color: 'var(--g-blue)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{mobileNetworkUrl}</span>
-              <button
-                onClick={copyMobileUrl}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#fff',
-                  cursor: 'pointer',
-                  marginLeft: '8px'
-                }}
-              >
-                {copiedLink ? <Check size={15} color="var(--g-green)" /> : <Copy size={15} />}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Custom Webhook Inspector Modal */}
-      {showCustomModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          background: 'rgba(0,0,0,0.75)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: 'var(--g-surface-1)',
-            border: '1px solid var(--g-border-hover)',
-            borderRadius: '18px',
-            padding: '24px',
-            maxWidth: '480px',
-            width: '90%',
-            boxShadow: '0 24px 50px rgba(0,0,0,0.7)'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: '#f8fafc' }}>Custom Webhook Payload Tester</div>
-              <button onClick={() => setShowCustomModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--g-text-tertiary)' }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={submitCustomWebhook} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>Transaction Amount (₹ INR)</label>
-                <input
-                  type="number"
-                  value={customForm.amount}
-                  onChange={(e) => setCustomForm({ ...customForm, amount: parseFloat(e.target.value) || 0 })}
-                  style={inputStyle}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>Decline Reason Code</label>
-                <select
-                  value={customForm.decline_code}
-                  onChange={(e) => setCustomForm({ ...customForm, decline_code: e.target.value })}
-                  style={inputStyle}
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => triggerSimulation('gateway_timeout')}
+                  className="btn-secondary"
+                  style={{ fontSize: '12px' }}
                 >
-                  <option value="upi_server_timeout">upi_server_timeout (NPCI Gateway Timeout)</option>
-                  <option value="upi_mandate_insufficient_funds">upi_mandate_insufficient_funds (UPI AutoPay)</option>
-                  <option value="processor_timeout">processor_timeout (Bank Server Drop)</option>
-                  <option value="card_expired">card_expired</option>
-                  <option value="lost_or_stolen_card">lost_or_stolen_card</option>
-                  <option value="do_not_honor">do_not_honor</option>
-                </select>
+                  <Zap size={14} color="var(--color-blue)" />
+                  <span>Google Pay (HDFC Timeout)</span>
+                </button>
+                <button
+                  onClick={() => triggerSimulation('paytm_timeout')}
+                  className="btn-secondary"
+                  style={{ fontSize: '12px' }}
+                >
+                  <Zap size={14} color="#00BAF2" />
+                  <span>Paytm Payments Bank Socket Timeout</span>
+                </button>
+                <button
+                  onClick={() => triggerSimulation('phonepe_timeout')}
+                  className="btn-secondary"
+                  style={{ fontSize: '12px' }}
+                >
+                  <Zap size={14} color="#5F259F" />
+                  <span>PhonePe YBL Switch Delay</span>
+                </button>
+                <button
+                  onClick={() => triggerSimulation('insufficient_funds')}
+                  className="btn-secondary"
+                  style={{ fontSize: '12px' }}
+                >
+                  <Clock size={14} color="var(--color-warning)" />
+                  <span>SBI AutoPay Mandate Shortfall</span>
+                </button>
               </div>
-
-              <div>
-                <label style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>Issuing Bank / Payment App</label>
-                <input
-                  type="text"
-                  value={customForm.issuing_bank}
-                  onChange={(e) => setCustomForm({ ...customForm, issuing_bank: e.target.value })}
-                  style={inputStyle}
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="g-button"
-                style={{
-                  marginTop: '10px',
-                  background: 'var(--g-blue)',
-                  color: '#041e49',
-                  border: 'none',
-                  padding: '12px',
-                  borderRadius: '9999px',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                Dispatch Webhook Event
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Subcomponent: 4-Part Audit Record Card (Google Material 3 Elevation Style)
-function AuditCard({ record, hitlMode, activeOverrideId, setActiveOverrideId, onOverride, onOpenToolModal }) {
-  const { transaction, diagnosis, optimization, compliance, outcome, recovered_amount_usd, processing_fee_saved_usd, latency_ms, dispatched_tools, hitl_status } = record;
-
-  const isRecovered = outcome === 'RECOVERED' || outcome === 'SCHEDULED';
-  const isBlocked = outcome === 'COMPLIANCE_BLOCKED';
-  const isAbandoned = outcome === 'ABANDONED_FEES_SAVED';
-  const isOverridden = hitl_status === 'OVERRIDDEN_BY_OPERATOR';
-  const isPreemptive = optimization.chosen_action === 'PROACTIVE_PREEMPTIVE_FAILOVER';
-
-  return (
-    <div className="g-card" style={{
-      background: 'var(--g-surface-1)',
-      border: `1px solid ${isPreemptive ? 'rgba(56, 189, 248, 0.4)' : isOverridden ? 'rgba(253, 214, 99, 0.4)' : isRecovered ? 'rgba(129, 201, 149, 0.35)' : isBlocked ? 'rgba(242, 139, 130, 0.4)' : 'var(--g-border)'}`,
-      borderRadius: '16px',
-      overflow: 'hidden',
-      boxShadow: isPreemptive ? '0 6px 24px rgba(56, 189, 248, 0.1)' : isRecovered ? '0 6px 24px rgba(129, 201, 149, 0.06)' : 'none'
-    }}>
-      {/* Top Banner */}
-      <div style={{
-        padding: '12px 18px',
-        background: isPreemptive ? 'rgba(56, 189, 248, 0.08)' : 'var(--g-surface-2)',
-        borderBottom: '1px solid var(--g-border)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '8px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <span className="font-mono" style={{
-            fontSize: '11px',
-            fontWeight: 700,
-            background: isPreemptive ? 'var(--g-blue-container)' : 'var(--g-green-container)',
-            border: `1px solid ${isPreemptive ? 'rgba(138, 180, 248, 0.3)' : 'rgba(129, 201, 149, 0.3)'}`,
-            color: isPreemptive ? 'var(--g-blue)' : 'var(--g-green)',
-            padding: '2px 8px',
-            borderRadius: '9999px'
-          }}>
-            #{record.id}
-          </span>
-          <span className="font-mono" style={{ fontSize: '13px', color: '#f8fafc', fontWeight: 800 }}>
-            ₹{transaction.amount.toFixed(2)}
-          </span>
-          <span style={{ fontSize: '11px', color: 'var(--g-text-secondary)', fontWeight: 500 }}>
-            {transaction.issuing_bank}
-          </span>
-          {isPreemptive && (
-            <span style={{
-              fontSize: '10px',
-              fontWeight: 700,
-              color: 'var(--g-blue)',
-              background: 'var(--g-blue-container)',
-              border: '1px solid rgba(138, 180, 248, 0.4)',
-              padding: '2px 8px',
-              borderRadius: '9999px'
-            }}>
-              🛡️ PREEMPTIVE SENSOR FAILOVER
-            </span>
-          )}
-          {isOverridden && (
-            <span style={{
-              fontSize: '10px',
-              fontWeight: 600,
-              color: 'var(--g-yellow)',
-              background: 'var(--g-yellow-container)',
-              border: '1px solid rgba(253, 214, 99, 0.3)',
-              padding: '2px 8px',
-              borderRadius: '9999px'
-            }}>
-              OPERATOR OVERRIDE
-            </span>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {/* Operator Override Button */}
-          {activeOverrideId === record.id ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <select
-                onChange={(e) => {
-                  if (e.target.value) onOverride(record.id, e.target.value);
-                }}
-                defaultValue=""
-                style={{
-                  background: 'var(--g-surface-3)',
-                  color: 'var(--g-yellow)',
-                  border: '1px solid var(--g-yellow)',
-                  fontSize: '11px',
-                  borderRadius: '6px',
-                  padding: '3px 6px',
-                  outline: 'none'
-                }}
-              >
-                <option value="" disabled>Select Action...</option>
-                <option value="INSTANT_REROUTE_BACKUP_GATEWAY">Force Switch to ICICI Rail</option>
-                <option value="SCHEDULE_SMART_PAYDAY_RETRY">Schedule for Payday (+1)</option>
-                <option value="ABANDON_NO_RETRY">Abort & Save Fee</option>
-                <option value="AUTO_CARD_UPDATER">Token Card Updater</option>
-              </select>
-              <button 
-                onClick={() => setActiveOverrideId(null)}
-                style={{ background: 'transparent', border: 'none', color: 'var(--g-text-tertiary)', cursor: 'pointer', fontSize: '12px' }}
-              >
-                ✕
-              </button>
             </div>
-          ) : (
-            <button
-              onClick={() => setActiveOverrideId(record.id)}
-              className="g-button"
-              title="Challenge HITL: Intervene and manually override AI decision"
+
+            {/* Custom Webhook Simulator Form */}
+            <div className="fintech-card" style={{ padding: '24px' }}>
+              <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '14px' }}>
+                Custom Webhook Payload Dispatcher
+              </h2>
+
+              <form onSubmit={submitCustomWebhook} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Amount (₹ INR)
+                  </label>
+                  <input
+                    type="number"
+                    value={customForm.amount}
+                    onChange={(e) => setCustomForm({ ...customForm, amount: parseFloat(e.target.value) || 0 })}
+                    className="fintech-input"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Decline Code
+                  </label>
+                  <select
+                    value={customForm.decline_code}
+                    onChange={(e) => setCustomForm({ ...customForm, decline_code: e.target.value })}
+                    className="fintech-input"
+                  >
+                    <option value="upi_server_timeout">UPI Server Timeout (Transient)</option>
+                    <option value="upi_mandate_insufficient_funds">UPI AutoPay Mandate Shortfall</option>
+                    <option value="insufficient_funds">Insufficient Funds (Card)</option>
+                    <option value="processor_timeout">Processor Network Timeout</option>
+                    <option value="card_expired">Card Expired in Vault</option>
+                    <option value="lost_or_stolen_card">Lost / Stolen Card (Terminal)</option>
+                    <option value="do_not_honor">Do Not Honor (Generic)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Issuing Bank
+                  </label>
+                  <input
+                    type="text"
+                    value={customForm.issuing_bank}
+                    onChange={(e) => setCustomForm({ ...customForm, issuing_bank: e.target.value })}
+                    className="fintech-input"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Payment Rail / Network
+                  </label>
+                  <select
+                    value={customForm.card_network}
+                    onChange={(e) => setCustomForm({ ...customForm, card_network: e.target.value })}
+                    className="fintech-input"
+                  >
+                    <option value="UPI / NPCI">UPI / NPCI</option>
+                    <option value="RUPAY">RuPay Direct Rail</option>
+                    <option value="VISA">Visa Network</option>
+                    <option value="MASTERCARD">Mastercard Network</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Customer Tenure (Months)
+                  </label>
+                  <input
+                    type="number"
+                    value={customForm.customer_tenure_months}
+                    onChange={(e) => setCustomForm({ ...customForm, customer_tenure_months: parseInt(e.target.value) || 1 })}
+                    className="fintech-input"
+                    min="1"
+                    max="60"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    Prior Retry Attempts
+                  </label>
+                  <input
+                    type="number"
+                    value={customForm.retry_count}
+                    onChange={(e) => setCustomForm({ ...customForm, retry_count: parseInt(e.target.value) || 0 })}
+                    className="fintech-input"
+                    min="0"
+                    max="6"
+                  />
+                </div>
+
+                <div style={{ gridColumn: 'span 3', display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                  <button type="submit" className="btn-primary" style={{ padding: '9px 20px' }}>
+                    <Send size={14} />
+                    <span>Dispatch Webhook to Sentinel</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Output Inspection Console */}
+            {customResult && (
+              <div className="fintech-card" style={{ padding: '24px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                  Live Webhook Execution Result
+                </h3>
+                <pre
+                  className="font-mono"
+                  style={{
+                    background: 'var(--bg-page)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    fontSize: '12px',
+                    overflowX: 'auto',
+                    color: 'var(--text-primary)'
+                  }}
+                >
+                  {JSON.stringify(customResult, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 5: COMPLIANCE CENTER (Regulatory Shields & Audit Evidence) */}
+        {/* ============================================================== */}
+        {activeTab === 'COMPLIANCE' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div
               style={{
+                background: '#FFFFFF',
+                border: '1px solid var(--border-color)',
+                borderRadius: 'var(--radius-card)',
+                padding: '20px 24px',
+                boxShadow: 'var(--shadow-sm)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px',
-                background: 'var(--g-surface-3)',
-                border: '1px solid var(--g-border)',
-                color: 'var(--g-yellow)',
-                padding: '4px 10px',
-                borderRadius: '9999px',
-                cursor: 'pointer',
-                fontSize: '11px',
-                fontWeight: 600
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px'
               }}
             >
-              <Settings size={12} />
-              <span>Override</span>
-            </button>
-          )}
-
-          <span className="font-mono" style={{ fontSize: '11px', color: 'var(--g-blue)' }}>
-            ⚡ {latency_ms}ms
-          </span>
-          <span className="font-mono" style={{
-            fontSize: '11px',
-            fontWeight: 700,
-            padding: '3px 10px',
-            borderRadius: '9999px',
-            background: isRecovered ? 'var(--g-green-container)' : isBlocked ? 'var(--g-red-container)' : 'var(--g-blue-container)',
-            color: isRecovered ? 'var(--g-green)' : isBlocked ? 'var(--g-red)' : 'var(--g-blue)',
-            border: `1px solid ${isRecovered ? 'rgba(129, 201, 149, 0.4)' : isBlocked ? 'rgba(242, 139, 130, 0.4)' : 'rgba(138, 180, 248, 0.4)'}`
-          }}>
-            {outcome}
-          </span>
-        </div>
-      </div>
-
-      {/* The 4-Part System Grid (Elevated Material 3 Cards) */}
-      <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '12px' }}>
-        {/* Part 1: Failure Trigger & Telemetry */}
-        <div style={stepBoxStyle}>
-          <div style={stepHeaderStyle}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--g-yellow)' }}>01 // AMBIENT TRIGGER</span>
-            <AlertCircle size={14} color="var(--g-yellow)" />
-          </div>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: '#f8fafc', marginTop: '4px' }}>
-            {transaction.decline_code.toUpperCase()}
-          </div>
-          <p style={{ fontSize: '11px', color: 'var(--g-text-secondary)', margin: '4px 0 8px 0', lineHeight: '1.4' }}>
-            {transaction.decline_message}
-          </p>
-          <div className="font-mono" style={{ fontSize: '10px', color: 'var(--g-text-tertiary)', marginTop: 'auto' }}>
-            Rail: {transaction.card_network} • Day {transaction.day_of_month}
-          </div>
-        </div>
-
-        {/* Part 2: XGBoost + SHAP Diagnosis */}
-        <div style={stepBoxStyle}>
-          <div style={stepHeaderStyle}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--g-blue)' }}>02 // SHAP DIAGNOSIS</span>
-            <Cpu size={14} color="var(--g-blue)" />
-          </div>
-          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--g-text-secondary)', marginTop: '4px' }}>
-            Root Cause:
-          </div>
-          <p style={{ fontSize: '11px', color: '#f8fafc', margin: '2px 0 6px 0', fontWeight: 500 }}>
-            {diagnosis.root_cause}
-          </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--g-text-tertiary)' }}>P(Recovery):</span>
-            <span className="font-mono" style={{ fontSize: '12px', fontWeight: 800, color: diagnosis.recovery_probability > 0.5 ? 'var(--g-green)' : 'var(--g-red)' }}>
-              {(diagnosis.recovery_probability * 100).toFixed(1)}%
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {diagnosis.shap_attributions.slice(0, 2).map((s, idx) => (
-              <div key={idx} className="font-mono" style={{
-                fontSize: '10px',
-                padding: '3px 8px',
-                borderRadius: '6px',
-                background: s.shap_value > 0 ? 'var(--g-green-container)' : 'var(--g-red-container)',
-                border: `1px solid ${s.shap_value > 0 ? 'rgba(129, 201, 149, 0.25)' : 'rgba(242, 139, 130, 0.25)'}`,
-                color: s.shap_value > 0 ? 'var(--g-green)' : 'var(--g-red)'
-              }}>
-                {s.shap_value > 0 ? `+${(s.shap_value * 100).toFixed(0)}%` : `${(s.shap_value * 100).toFixed(0)}%`} {s.feature}: {s.description.slice(0, 32)}...
+              <div>
+                <h1 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  Compliance & Regulatory Shield Center
+                </h1>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  Enforces Visa Rule 5.4.1.3, Mastercard Excessive Retry standards, and merchant fee preservation rules before any recovery action is taken.
+                </p>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Part 3: Multi-Armed Bandit Action */}
-        <div style={stepBoxStyle}>
-          <div style={stepHeaderStyle}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: '#c084fc' }}>03 // BANDIT ACTION</span>
-            <TrendingUp size={14} color="#c084fc" />
-          </div>
-          <div style={{ marginTop: '4px' }}>
-            <span style={{
-              fontSize: '11px',
-              fontWeight: 700,
-              background: isPreemptive ? 'var(--g-blue-container)' : 'rgba(192, 132, 252, 0.14)',
-              border: `1px solid ${isPreemptive ? 'rgba(138, 180, 248, 0.4)' : 'rgba(192, 132, 252, 0.3)'}`,
-              color: isPreemptive ? 'var(--g-blue)' : '#c084fc',
-              padding: '2px 8px',
-              borderRadius: '9999px',
-              display: 'inline-block'
-            }}>
-              {optimization.chosen_action}
-            </span>
-          </div>
-          <p style={{ fontSize: '11px', color: 'var(--g-text-secondary)', margin: '6px 0', lineHeight: '1.4' }}>
-            {optimization.action_reasoning}
-          </p>
-          <div className="font-mono" style={{ fontSize: '11px', color: 'var(--g-green)', fontWeight: 700, marginTop: 'auto' }}>
-            Expected Net ROI: +₹{optimization.expected_recovery_value_usd.toFixed(2)}
-          </div>
-        </div>
+              <button onClick={handleExportCsv} className="btn-primary">
+                <Download size={14} />
+                <span>Export Audit CSV</span>
+              </button>
+            </div>
 
-        {/* Part 4: Compliance Guardrails & Outcome */}
-        <div style={stepBoxStyle}>
-          <div style={stepHeaderStyle}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: isRecovered ? 'var(--g-green)' : isBlocked ? 'var(--g-red)' : 'var(--g-blue)' }}>
-              04 // REGULATORY OUTCOME
-            </span>
-            <ShieldCheck size={14} color={isRecovered ? 'var(--g-green)' : isBlocked ? 'var(--g-red)' : 'var(--g-blue)'} />
-          </div>
+            {/* 4 Guardrails Matrix */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+              {[
+                { title: 'Visa Global Mandate', rule: 'Rule 5.4.1.3', desc: 'Cap of max 4 retry attempts within 16 calendar days to prevent interchange fines.' },
+                { title: 'Mastercard Retry Standards', rule: 'Rule 8.2', desc: 'Velocity filter strictly capping retries to maximum 2 attempts within rolling 24 hours.' },
+                { title: 'Terminal Fraud Prohibition', rule: 'Visa Core 5.1', desc: 'Zero-tolerance block on lost or stolen cards to prevent merchant account suspension.' },
+                { title: 'Interchange Margin Floor', rule: 'Fee Shield', desc: 'Blocks micro-transactions where retry fee ($0.35) exceeds recovery net profit.' }
+              ].map((m, i) => (
+                <div key={i} className="fintech-card" style={{ padding: '18px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span className="badge badge-green font-mono" style={{ fontSize: '10px' }}>{m.rule}</span>
+                    <ShieldCheck size={16} color="var(--color-green)" />
+                  </div>
+                  <h3 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                    {m.title}
+                  </h3>
+                  <p style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                    {m.desc}
+                  </p>
+                </div>
+              ))}
+            </div>
 
-          <div style={{ fontSize: '11px', color: compliance.status === 'APPROVED' ? 'var(--g-green)' : 'var(--g-red)', fontWeight: 600, margin: '4px 0 2px 0' }}>
-            {compliance.status === 'APPROVED' ? '✓ Network Rules Cleared' : '✕ Action Blocked'}
-          </div>
-          <p style={{ fontSize: '11px', color: 'var(--g-text-tertiary)', margin: '2px 0 6px 0', lineHeight: '1.3' }}>
-            {compliance.reason}
-          </p>
-
-          <div style={{
-            marginTop: 'auto',
-            padding: '8px 10px',
-            background: 'var(--g-surface-1)',
-            borderRadius: '8px',
-            border: '1px solid var(--g-border)'
-          }}>
-            {isRecovered ? (
-              <div className="font-mono" style={{ fontSize: '12px', fontWeight: 800, color: 'var(--g-green)' }}>
-                🎉 Recovered: +₹{recovered_amount_usd.toFixed(2)}
+            {/* Compliance Evidence Table */}
+            <div className="fintech-card" style={{ padding: '24px', overflowX: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Regulatory Audit Trail Evidence
+                </h2>
+                <span className="font-mono" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  {auditRecords.length} records in immutable ledger
+                </span>
               </div>
-            ) : isAbandoned ? (
-              <div className="font-mono" style={{ fontSize: '12px', fontWeight: 800, color: 'var(--g-blue)' }}>
-                🛡️ Preserved Fees: +₹{(processing_fee_saved_usd * 85).toFixed(0)}
+
+              <div className="table-responsive-wrapper"><table className="fintech-table">
+                <thead>
+                  <tr>
+                    <th>TIMESTAMP</th>
+                    <th>RECORD ID</th>
+                    <th>AMOUNT</th>
+                    <th>BANK & NETWORK</th>
+                    <th>AI DECISION</th>
+                    <th>COMPLIANCE STATUS</th>
+                    <th>OUTCOME</th>
+                    {hitlMode && <th>OPERATOR OVERRIDE</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={hitlMode ? 8 : 7} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)' }}>
+                        No audit records recorded yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    auditRecords.map((r) => {
+                      const isApproved = r.compliance?.status === 'APPROVED';
+                      return (
+                        <tr key={r.id}>
+                          <td className="font-mono" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                            {new Date(r.timestamp * 1000).toLocaleTimeString()}
+                          </td>
+                          <td className="font-mono" style={{ fontSize: '11px', fontWeight: 600 }}>
+                            {r.id}
+                          </td>
+                          <td className="font-mono" style={{ fontWeight: 700 }}>
+                            ₹{r.transaction?.amount?.toFixed(2)}
+                          </td>
+                          <td style={{ fontSize: '12px' }}>
+                            <div>{r.transaction?.issuing_bank}</div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{r.transaction?.card_network}</div>
+                          </td>
+                          <td style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-blue)' }}>
+                            {r.optimization?.chosen_action}
+                          </td>
+                          <td>
+                            <span className={`badge ${isApproved ? 'badge-green' : 'badge-error'}`} style={{ fontSize: '11px' }}>
+                              {isApproved ? '✓ Cleared' : '✕ Blocked'}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="badge badge-neutral font-mono" style={{ fontSize: '11px' }}>
+                              {r.outcome}
+                            </span>
+                          </td>
+                          {hitlMode && (
+                            <td>
+                              <button
+                                onClick={() => overrideAction(r.id, 'ABANDON_NO_RETRY')}
+                                className="btn-secondary"
+                                style={{ padding: '3px 8px', fontSize: '10px' }}
+                              >
+                                Abort
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+        )}
+
+      </main>
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div className="modal-backdrop" onClick={() => setShowSettingsModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings size={18} color="var(--color-blue)" />
+                <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  System Configuration
+                </h3>
+              </div>
+              <button onClick={() => setShowSettingsModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Human-in-the-Loop Toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', background: 'var(--bg-page)', borderRadius: '8px' }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Human-in-the-Loop (HITL) Mode
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Requires operator approval for recoveries above ₹5,000.
+                  </div>
+                </div>
+                <button
+                  onClick={toggleHitl}
+                  className={hitlMode ? 'btn-primary' : 'btn-secondary'}
+                  style={{ fontSize: '12px', padding: '6px 14px' }}
+                >
+                  {hitlMode ? 'Supervised Enabled' : '100% Autonomous'}
+                </button>
+              </div>
+
+              {/* Audio Chime Feedback Toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', background: 'var(--bg-page)', borderRadius: '8px' }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    Web Audio Feedback Chime
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Subtle synthetic audio chime when revenue is recovered.
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSoundEnabled(!soundEnabled)}
+                  className="btn-secondary"
+                  style={{ fontSize: '12px', padding: '6px 12px' }}
+                >
+                  {soundEnabled ? <Volume2 size={15} color="var(--color-green)" /> : <VolumeX size={15} />}
+                  <span>{soundEnabled ? 'Enabled' : 'Muted'}</span>
+                </button>
+              </div>
+
+              {/* Mobile Phone Wi-Fi Link */}
+              <div style={{ padding: '14px', background: 'var(--bg-page)', borderRadius: '8px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  Mobile Device Link (Wi-Fi PWA)
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                  Open this URL on any smartphone connected to the same Wi-Fi to test the mobile simulator with phone vibration feedback.
+                </p>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8000'}
+                    readOnly
+                    className="fintech-input font-mono"
+                    style={{ fontSize: '11px' }}
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.origin);
+                      setCopiedLink(true);
+                      setTimeout(() => setCopiedLink(false), 2000);
+                    }}
+                    className="btn-secondary"
+                  >
+                    {copiedLink ? <Check size={14} color="var(--color-green)" /> : <Copy size={14} />}
+                    <span>{copiedLink ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowSettingsModal(false)} className="btn-primary" style={{ padding: '8px 16px' }}>
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Architecture Flowchart Modal */}
+      {showFlowchartModal && (
+        <div className="modal-backdrop" onClick={() => setShowFlowchartModal(false)} style={{ zIndex: 120 }}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '1100px',
+              width: '95vw',
+              height: '88vh',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '20px',
+              borderRadius: '16px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--color-blue-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Workflow size={18} color="var(--color-blue)" />
+                </div>
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>PayRevive Architecture & Decision Flowchart</span>
+                    <span className="badge badge-blue font-mono" style={{ fontSize: '10px' }}>Zero-Prompt Loop</span>
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    End-to-end webhook ingestion, XGBoost root-cause classification, contextual bandit optimization, and RBI guardrails.
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <a
+                  href={`${API_BASE}/flowchart`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-secondary"
+                  style={{ fontSize: '12px', padding: '6px 10px', textDecoration: 'none' }}
+                  title="Open flowchart in dedicated browser tab"
+                >
+                  <span>Open in Tab</span>
+                  <ExternalLink size={13} />
+                </a>
+                <a
+                  href={`${API_BASE}/flowchart.svg`}
+                  download="PayRevive_Architecture.svg"
+                  className="btn-secondary"
+                  style={{ fontSize: '12px', padding: '6px 10px', textDecoration: 'none' }}
+                  title="Download vector SVG flowchart"
+                >
+                  <Download size={13} />
+                  <span>SVG</span>
+                </a>
+                <button
+                  onClick={() => setShowFlowchartModal(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', borderRadius: '6px' }}
+                  title="Close flowchart (Esc)"
+                >
+                  <X size={20} color="var(--text-secondary)" />
+                </button>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, position: 'relative', background: '#0b0f19', borderRadius: '10px', overflow: 'hidden' }}>
+              <iframe
+                src={`${API_BASE}/flowchart.html`}
+                title="PayRevive Interactive Architecture Flowchart"
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile QR Sentinel Modal */}
+      {showQrModal && (
+        <div className="modal-backdrop" onClick={() => setShowQrModal(false)} style={{ zIndex: 120 }}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '460px',
+              width: '92vw',
+              padding: '24px',
+              borderRadius: '16px',
+              textAlign: 'center'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'var(--color-blue-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Smartphone size={16} color="var(--color-blue)" />
+                </div>
+                <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  Mobile UPI Sentinel
+                </span>
+              </div>
+              <button onClick={() => setShowQrModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                <X size={18} color="var(--text-secondary)" />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px', textAlign: 'left', lineHeight: 1.5 }}>
+              Scan this QR code with your phone camera on the same Wi-Fi. It opens the <b>Google Pay & Paytm Mobile Checkout Terminal</b>. Tap Pay on your phone and watch this screen update live!
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+              <QRCodeView text={`${mobileNetworkUrl}/pay`} size={180} />
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              <input
+                type="text"
+                value={mobileNetworkUrl + '/pay'}
+                readOnly
+                className="fintech-input font-mono"
+                style={{ fontSize: '11px', textAlign: 'center' }}
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(mobileNetworkUrl);
+                  setCopiedLink(true);
+                  setTimeout(() => setCopiedLink(false), 2000);
+                }}
+                className="btn-secondary"
+                style={{ padding: '6px 12px' }}
+              >
+                {copiedLink ? <Check size={14} color="var(--color-green)" /> : <Copy size={14} />}
+                <span>{copiedLink ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+              <a
+                href={`${API_BASE}/pay`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary"
+                style={{ flex: 1, textDecoration: 'none', textAlign: 'center', padding: '8px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+              >
+                <span>Launch Mobile Terminal in New Tab</span>
+                <ExternalLink size={13} />
+              </a>
+            </div>
+
+            <div style={{ background: 'var(--bg-page)', padding: '12px', borderRadius: '8px', fontSize: '11px', color: 'var(--text-secondary)', textAlign: 'left' }}>
+              💡 <b>Live Demonstration:</b> When you tap <b>"Pay via Google Pay"</b> or <b>"Pay via Paytm"</b> on your phone, your phone vibrates and this dashboard instantly intercepts and recovers the transaction via ICICI secondary rail!
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dispatched Tool Preview Modal (WhatsApp / Slack) */}
+      {showToolModal && (
+        <div className="modal-backdrop" onClick={() => setShowToolModal(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ padding: '24px', maxWidth: '480px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                {showToolModal.type === 'WHATSAPP' ? 'Dispatched WhatsApp Recovery Link' : 'Dispatched FinOps Alert'}
+              </h3>
+              <button onClick={() => setShowToolModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {showToolModal.type === 'WHATSAPP' ? (
+              <div style={{ background: '#EFEAE2', padding: '16px', borderRadius: '10px' }}>
+                <div style={{ background: '#FFFFFF', padding: '12px 14px', borderRadius: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.1)', fontSize: '13px', lineHeight: 1.5 }}>
+                  <p style={{ fontWeight: 600, color: '#075E54', marginBottom: '4px' }}>PayRevive Smart Recovery</p>
+                  <p style={{ color: '#111827', marginBottom: '8px' }}>
+                    Hi, your mandate for ₹{showToolModal.record?.transaction?.amount?.toFixed(2)} could not be processed due to a temporary bank delay.
+                  </p>
+                  <p style={{ color: '#111827', marginBottom: '12px' }}>
+                    Tap below to complete in 1-click via ICICI Backup UPI:
+                  </p>
+                  <div style={{ background: '#25D366', color: '#FFFFFF', padding: '8px 12px', borderRadius: '6px', textAlign: 'center', fontWeight: 700, fontSize: '12px' }}>
+                    👉 1-Click UPI Payment Link
+                  </div>
+                </div>
               </div>
             ) : (
-              <div className="font-mono" style={{ fontSize: '12px', fontWeight: 800, color: 'var(--g-red)' }}>
-                🚫 Regulatory Block Triggered
+              <div style={{ background: '#4A154B', padding: '16px', borderRadius: '10px', color: '#FFFFFF' }}>
+                <div style={{ background: '#1A1D21', padding: '12px 14px', borderRadius: '8px', fontSize: '12px', lineHeight: 1.5 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#E01E5A', fontWeight: 700, marginBottom: '4px' }}>
+                    <AlertTriangle size={14} />
+                    <span>#finops-radar-alerts</span>
+                  </div>
+                  <p style={{ color: '#E2E8F0', marginBottom: '6px' }}>
+                    <b>Intervention:</b> Intercepted ₹{showToolModal.record?.transaction?.amount?.toFixed(2)} decline at {showToolModal.record?.transaction?.issuing_bank}.
+                  </p>
+                  <p style={{ color: '#94A3B8' }}>
+                    <b>Action:</b> {showToolModal.record?.optimization?.chosen_action} (Fee Saved: $0.35).
+                  </p>
+                </div>
               </div>
             )}
+
+            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowToolModal(null)} className="btn-secondary" style={{ padding: '6px 14px' }}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Challenge Feature: Cross-Tool Action Dispatch */}
-      {dispatched_tools && dispatched_tools.length > 0 && (
-        <div style={{
-          padding: '10px 18px',
-          background: 'var(--g-surface-2)',
-          borderTop: '1px solid var(--g-border)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          flexWrap: 'wrap',
-          fontSize: '11px'
-        }}>
-          <span style={{ color: 'var(--g-text-secondary)', fontWeight: 700, fontSize: '10px' }}>
-            DISPATCHED TOOLS:
-          </span>
-          {dispatched_tools.map((tool, idx) => {
-            const isWhatsApp = tool.toLowerCase().includes('whatsapp');
-            const isSlack = tool.toLowerCase().includes('slack');
-
-            return (
-              <span 
-                key={idx} 
-                onClick={() => {
-                  if (isWhatsApp) onOpenToolModal('WHATSAPP', record);
-                  if (isSlack) onOpenToolModal('SLACK', record);
-                }}
-                className="g-button"
-                style={{
-                  background: isWhatsApp ? 'rgba(37, 211, 102, 0.14)' : isSlack ? 'rgba(224, 30, 90, 0.14)' : 'var(--g-blue-container)',
-                  border: `1px solid ${isWhatsApp ? '#25D366' : isSlack ? '#E01E5A' : 'rgba(138, 180, 248, 0.3)'}`,
-                  color: isWhatsApp ? '#25D366' : isSlack ? '#E01E5A' : 'var(--g-blue)',
-                  padding: '3px 10px',
-                  borderRadius: '9999px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  cursor: (isWhatsApp || isSlack) ? 'pointer' : 'default'
-                }}
-              >
-                {isWhatsApp ? <MessageSquare size={12} color="#25D366" /> :
-                 isSlack ? <Share2 size={12} color="#E01E5A" /> :
-                 <Zap size={11} color="var(--g-blue)" />}
-                <span>{tool} {(isWhatsApp || isSlack) && '🔍'}</span>
-              </span>
-            );
-          })}
+      {/* Floating Recovery Toast */}
+      {lastNotification && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            background: '#FFFFFF',
+            border: lastNotification.isMobile ? '2px solid var(--color-blue)' : '1px solid var(--color-green-border)',
+            borderRadius: '12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+            padding: '14px 18px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            zIndex: 100,
+            animation: 'fadeIn 0.25s ease-out'
+          }}
+        >
+          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: lastNotification.isMobile ? 'var(--color-blue-light)' : 'var(--color-green-light)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {lastNotification.isMobile ? <Smartphone size={18} color="var(--color-blue)" /> : <CheckCircle2 size={18} color="var(--color-green)" />}
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', fontWeight: 800, color: lastNotification.isMobile ? 'var(--color-blue)' : 'var(--color-green)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>{lastNotification.isMobile ? `📱 LIVE ${lastNotification.appName.toUpperCase()} EVENT` : 'Autonomous Revenue Recovered'}</span>
+            </div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+              ₹{lastNotification.amount?.toFixed(2)} — {lastNotification.action}
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 }
-
-// Styling Constants (Google Material 3 Theme)
-const metricCardStyle = {
-  background: 'var(--g-surface-1)',
-  border: '1px solid var(--g-border)',
-  borderRadius: '16px',
-  padding: '18px 20px',
-};
-
-const simBtnStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  background: 'var(--g-surface-2)',
-  border: '1px solid var(--g-border)',
-  color: '#f8fafc',
-  padding: '10px 14px',
-  borderRadius: '12px',
-  cursor: 'pointer',
-  fontSize: '11px',
-  fontWeight: 600,
-  textAlign: 'left'
-};
-
-const stepBoxStyle = {
-  background: 'var(--g-surface-2)',
-  border: '1px solid var(--g-border)',
-  borderRadius: '12px',
-  padding: '14px',
-  display: 'flex',
-  flexDirection: 'column'
-};
-
-const stepHeaderStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: '4px'
-};
-
-const inputStyle = {
-  width: '100%',
-  padding: '10px 14px',
-  background: 'var(--g-surface-2)',
-  border: '1px solid var(--g-border)',
-  borderRadius: '10px',
-  color: '#fff',
-  marginTop: '4px',
-  fontSize: '13px',
-  outline: 'none'
-};
