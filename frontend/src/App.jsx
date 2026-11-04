@@ -1,4 +1,3 @@
-import QRCodeView from './QRCodeView';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, 
